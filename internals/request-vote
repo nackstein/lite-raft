@@ -1,0 +1,56 @@
+#!/bin/dash
+
+#Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
+#Distributed under the terms of a MIT license.
+
+#input  term candidate_id last_log_index last_log_term
+#output term vote_granted
+
+read current_term   < state/current_term
+read voted_for      < state/voted_for
+read last_log_index < state/last_log_index
+read cluster_nodes  < conf/cluster_nodes
+valid_candidate=false
+
+if ! flock -e -w 0 temp/master_lock true ; then
+   for h in $cluster_nodes ; do
+      [ "$h" = "$hostname" ] && continue
+      if [ "$2" = "$h" ] ; then
+         valid_candidate="true"
+      fi
+   done
+
+   if [ "$1" -ge "$current_term" -a "$valid_candidate" = "true" ] ; then
+      if [ "$1" -gt "$current_term" ] ; then
+         current_term="$1"
+         voted_for=""
+         echo "$voted_for" > state/voted_for
+         echo follower > temp/server_role
+         echo "$current_term" > state/current_term
+      fi
+      if [ "$3" -ge "$last_log_index" -a "$4" -ge "$(basename state-machine-log/$last_log_index/*)" ] ; then
+         if [ -z "$voted_for" ] ; then
+            #first time I vote for you, reset election_timeout
+            cp conf/election_timeout temp/election_timeout
+            echo "$candidate_id" > state/voted_for
+            #sync
+            echo $current_term true
+         elif [ "$voted_for" = "$candidate_id" ] ; then
+            #already voted for you, vote again but do no reset election_timeout
+            echo "$candidate_id" > state/voted_for
+            echo $current_term true
+         else
+            #already voted for someone else
+            echo $current_term false
+         fi
+      else
+         echo $current_term false
+      fi
+   else
+      #term too old or candidate not in cluster configuration
+      echo $current_term false
+   fi
+else
+   #master process is not running, return error
+   echo 0 false
+fi

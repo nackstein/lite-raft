@@ -1,0 +1,97 @@
+#!/bin/dash
+
+#Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
+#Distributed under the terms of a MIT license.
+
+export sshopt="-o ConnectTimeout=1 -o ServerAliveInterval=2 \
+-o ServerAliveCountMax=3 -o StrictHostKeyChecking=no \
+-o ControlMaster=auto -o ControlPath=~/.ssh/master-%r@%h:%p"
+cd $(dirname $0)
+
+read server_role      < temp/server_role
+read hostname         < temp/hostname
+read current_leader   < temp/current_leader
+read client_timeout   < conf/client_timeout
+read cluster_nodes    < conf/cluster_nodes
+
+#client-append-entry:
+#input  command key value
+#output term entry_index success
+
+if ! flock -e -w 0 temp/master_lock true ; then
+   if [ "$server_role" = "leader" ] ; then
+      case "$1" in
+      set|unset|noop)
+         {
+            flock -e 9
+            flock -e -w 1 temp/activity_lock internals/client-append-entry "$@" > temp/client_result
+            read term entry_index success < temp/client_result
+         } 9> temp/client_result
+
+         if [ "$success" = "true" ] ; then
+            #inserted: wait for commit
+            flock -e -w 1 temp/activity_lock internals/leader
+            read current_term < state/current_term
+            read commit_index < temp/commit_index
+            i=0
+            while [ "$commit_index" -lt "$entry_index" -a "$current_term" -eq "$term" -a "$i" -lt "$client_timeout" ] ; do
+               sleep 1
+               i=$(($i+1))
+               read current_term < state/current_term
+               read commit_index < temp/commit_index
+            done
+
+            if [ "$commit_index" -ge "$entry_index" -a "$current_term" -eq "$term" ] ; then
+               echo client succeded
+               exit 0
+            elif [ "$current_term" -ne "$term" ] ; then
+               echo term changed while waiting for commit
+               exit 1
+            else
+               echo timeout waiting for commit
+               exit 1
+            fi
+         else
+            echo client failed to append new entry
+            exit 1
+         fi
+      ;;
+      get)
+         echo false > temp/quorum_heartbeat
+         #call the leader so at least an heartbeat is sent
+         flock -e -w 1 temp/activity_lock internals/leader
+         read quorum_heartbeat < temp/quorum_heartbeat
+         if [ "$quorum_heartbeat" = "true" ] ; then
+            #leader has still the quorum
+            read val < state-machine-data/$2
+            echo $val
+         else
+            echo leader is stale. try again
+            exit 1
+         fi
+      ;;
+      status)
+         echo Leader: $hostname
+         for h in $cluster_nodes ; do
+            [ "$h" = "$hostname" ] && continue
+            read follower_timeout < temp/${h}_follower_timeout
+            if [ "$follower_timeout" -gt 0 ] ; then
+               echo Follower: $h
+            else
+               echo Unknown: $h
+            fi
+         done
+      ;;
+      esac
+
+   elif [ -n "$current_leader" ] ; then
+      ssh $sshopt "$current_leader" $PWD/$0 "$@"
+   else
+      echo leader is not yet ready
+      exit 1
+   fi
+else
+   #no process running here, return error
+   echo no server running on $hostname. cannot process request.
+   exit 1
+fi

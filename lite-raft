@@ -1,0 +1,45 @@
+#!/bin/dash
+
+#Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
+#Distributed under the terms of a MIT license.
+
+set -e
+
+export sshopt="-o ConnectTimeout=1 -o StrictHostKeyChecking=no"
+cd $(dirname $0)
+
+case "$1" in
+first-boot)
+   echo first-boot
+   rm -rf state temp state-machine-log state-machine-data /dev/shm/lite-raft/temp
+   mkdir -p state state-machine-log/0 state-machine-data message-log
+   touch state-machine-log/0/0
+   echo 0  > state/current_term
+   echo 0  > state/last_log_index
+   echo "" > state/voted_for
+   ./lite-raft-server > message-log/lite-raft-server.log &
+;;
+start)
+   ./lite-raft-server > message-log/lite-raft-server.log &
+;;
+stop)
+   echo stop
+   pkill -f "/bin/dash ./lite-raft-server"
+;;
+check)
+   echo check
+;;
+status)
+   echo status
+;;
+query)
+;;
+dummy)
+   echo dummy test
+   ./lite-raft-client set the-answer 42
+;;
+dummy2)
+   echo dummy test2
+   ./lite-raft-client get the-answer
+;;
+esac

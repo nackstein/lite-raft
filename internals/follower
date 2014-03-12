@@ -1,0 +1,22 @@
+#!/bin/dash
+
+#Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
+#Distributed under the terms of a MIT license.
+
+read election_timeout < temp/election_timeout
+election_timeout=$(($election_timeout-1))
+echo $election_timeout > temp/election_timeout
+
+if [ "$election_timeout" -le 0 ] ; then
+   #switch to candidate
+   cp conf/election_timeout temp/election_timeout
+   echo candidate > temp/server_role
+   echo "" > state/voted_for
+   read current_term < state/current_term
+   current_term=$(($current_term+1))
+   echo $current_term > state/current_term
+   echo $(date) switching to candidate
+else
+   # apply commited log.....
+   . internals/apply-log
+fi

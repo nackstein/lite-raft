@@ -1,0 +1,117 @@
+#!/bin/dash
+
+#Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
+#Distributed under the terms of a MIT license.
+
+#append-entry:
+#input  term leader_id prev_log_index prev_log_term entry_term entry_command entry leader_commit
+#output term success
+
+read current_term     < state/current_term
+read last_log_index   < state/last_log_index
+read commit_index     < temp/commit_index
+read hostname         < temp/hostname
+read cluster_nodes    < conf/cluster_nodes
+read follower_timeout < conf/follower_timeout
+
+cluster_nodes_new=""
+cluster_nodes_old_new="$cluster_nodes"
+if [ -f conf/cluster_nodes_new ] ; then
+   read cluster_nodes_new < conf/cluster_nodes_new
+   cluster_nodes_old_new=$(for h in $cluster_nodes $cluster_nodes_new ; do echo $h ; done | sort -u)
+fi
+
+echo false          > temp/quorum_heartbeat
+
+for h in $cluster_nodes_old_new; do
+   [ "$h" = "$hostname" ] && continue
+   {
+      read match_index < temp/${h}_match_index || match_index=0
+      read next_index  < temp/${h}_next_index  || next_index=$(($last_log_index+1))
+
+      prev_log_index=$(($next_index-1))
+      prev_log_term=$(basename state-machine-log/$prev_log_index/*)
+
+      if [ "$last_log_index" -ge "$next_index" ] ; then
+         #send entry
+         read entry_command entry_value < $(echo state-machine-log/$next_index/*)
+         entry_term=$(basename state-machine-log/$next_index/*)
+      else
+         #send heartbeat
+         entry_value=""
+         entry_term=""
+      fi
+      ssh $sshopt $h cd "'"$PWD"'" \; flock -e -w 0.2 temp/activity_lock \
+         internals/append-entry $current_term $hostname $prev_log_index \
+         $prev_log_term "'"$entry_term"'" "'"$entry_command"'" "'"$entry_value"'" \
+         $commit_index > temp/${h}_append_result < /dev/null
+
+      read term success < temp/${h}_append_result
+      read next_index   < temp/${h}_next_index
+
+      if [ "$((term+0))" -eq "$current_term" -a "$success" = "true" -a "$last_log_index" -ge "$next_index" ] ; then
+         #sent entry, update match_index
+         echo $next_index        > temp/${h}_match_index
+         echo $(($next_index+1)) > temp/${h}_next_index
+         echo $follower_timeout  > temp/${h}_follower_timeout
+      elif [ "$((term+0))" -eq "$current_term" -a "$success" = "false" ] ; then
+         #consistency check failed: decrement next_index for host h
+         read next_index  < temp/${h}_next_index || next_index=$(($last_log_index+1))
+         echo $(($next_index-1)) > temp/${h}_next_index
+         echo $follower_timeout  > temp/${h}_follower_timeout
+      elif [ "$(($term+0))" -gt "$current_term" ] ; then
+         #found a higher term: step down
+         cp conf/election_timeout temp/election_timeout
+         echo ""            > state/voted_for
+         echo follower      > temp/server_role
+         echo "$((term+0))" > state/current_term
+         echo $(date) switching to follower
+      else
+         read h_follower_timeout < temp/${h}_follower_timeout || h_follower_timeout=1
+         if [ "$h_follower_timeout" -gt 0 ] ; then
+            h_follower_timeout=$(($h_follower_timeout-1))
+         fi
+         echo $h_follower_timeout > temp/${h}_follower_timeout
+      fi
+   } &
+done
+
+wait
+
+read server_role < temp/server_role
+[ "$server_role" != "leader" ] && exit
+
+quorum_heartbeat=true
+N=$last_log_index
+
+for configuration in "$cluster_nodes" "$cluster_nodes_new" ; do
+   i=0; q=1; indexes=""
+   for h in $configuration ; do
+      if [ "$h" = "$hostname" ] ; then
+         match_index=$last_log_index
+      else
+         read match_index < temp/${h}_match_index
+         read h_follower_timeout < ${h}_follower_timeout
+         q=$(($q+($h_follower_timeout+$follower_timeout-1)/$follower_timeout))
+      fi 
+      indexes="$match_index\n$indexes"
+      i=$(($i+1))
+   done
+   majority=$(($i/2+1))
+   majority_match=$commit_index
+   for match_index in $(printf "$indexes" | sort -n | head -n $(($i+1/2))) ; do
+      if [ "$match_index" -gt "$commit_index" -a -f state-machine-log/$match_index/$current_term ] ; then
+         majority_match=$match_index
+      fi
+   done
+   [ "$majority_match" -lt "$N" -a "$majority_match" -gt "$commit_index" ] && N=$majority_match
+   [ "$q" -lt "$majority" ] && quorum_heartbeat=false
+done
+
+if [ "$N" -gt "$commit_index" -a -f state-machine-log/$N/$current_term ] ; then
+   commit_index=$N
+   echo $commit_index > temp/commit_index
+fi
+echo $quorum_heartbeat > temp/quorum_heartbeat
+
+. internals/apply-log

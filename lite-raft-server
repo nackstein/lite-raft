@@ -1,0 +1,69 @@
+#!/bin/dash
+
+#Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
+#Distributed under the terms of a MIT license.
+
+export sshopt="-o ConnectTimeout=1 -o ServerAliveInterval=2 \
+-o ServerAliveCountMax=3 -o StrictHostKeyChecking=no \
+-o ControlMaster=auto -o ControlPath=~/.ssh/master-%r@%h:%p"
+
+cd $(dirname $0)
+
+mkdir -p /dev/shm/lite-raft/temp
+ln -sf /dev/shm/lite-raft/temp temp
+   
+{
+   flock -e 9
+    
+   echo follower > temp/server_role
+   echo 0        > temp/last_log_applied
+   echo 0        > temp/commit_index
+   echo false    > temp/quorum_heartbeat
+   cp conf/election_timeout temp/election_timeout
+   
+   hostname -s > temp/hostname
+   read hostname < temp/hostname
+   read cluster_nodes < conf/cluster_nodes
+
+   valid_member="false"
+   for h in $cluster_nodes ; do
+      [ "$h" = "$hostname" ] && valid_member="true"
+   done
+
+   if [ "$valid_member" = "false" ] ; then
+      echo this host is not member of the cluster
+      exit 1
+   fi
+   
+   #cluster_nodes=$(for h in $cluster_nodes ; do echo $h ; done | sort -u)
+   #echo $cluster_nodes > conf/cluster_nodes
+   
+   echo $(date) starting as follower
+   while true ; do
+      for h in $cluster_nodes ; do
+         if [ "$h" != "$hostname" ] ; then
+            [ -S ~/.ssh/master-${USER}@$h:22 ] || ssh -MNf $sshopt root@$h &
+         fi
+      done
+      read server_role < temp/server_role
+      sleep 1 &
+      case "$server_role" in 
+       follower)
+         flock -e -w 1 temp/activity_lock internals/follower
+       ;;
+       candidate)
+         #usleep between 0 and 1020000 microseconds
+         usleep $(($(od -An -N1 -d /dev/urandom)*4000))
+         flock -e -w 1 temp/activity_lock internals/candidate
+       ;;
+       leader)
+         flock -e -w 1 temp/activity_lock internals/leader
+       ;;
+       quitter)
+         exit
+       ;;
+      esac
+      wait
+   done
+   
+} 9> temp/master_lock

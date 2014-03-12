@@ -1,0 +1,36 @@
+lite-raft is still under early development stage.
+this release is just to for preview and playing.
+
+here the steps you need to do manually for now:
+- configure conf/cluster_nodes with a space
+separated list of hostname (those that will form
+the cluster)
+
+- verify that the user you use to test it is able
+to execute ssh on between node without password
+and without confirmation for ssh key fingerprint.
+
+
+- copy the lite-raft directory on every node and 
+execute it with ./lite-raft first-boot
+
+to stop it on a node: ./lite-raft stop
+to start (from second time and on): ./lite-raft start
+to insert a test entry ./lite-raft dummy
+
+read the code and give me feedback if you like it or not :)
+
+my mail: luigi.tarenga@gmail.com
+
+enjoy!
+
+ps: many features are not implemented yet, I'm working on
+it. come back to check in few days if something changed!
+
+todo:
+when a conf_old_new command is received the configuration
+is changed, but if the log is deleted by a future leader
+while it's not committed the configuration change is not
+automatically rollbacked up. the client that ask for the
+configuration change must assure that all is done correctly,
+eventually repushing the old configuration. 

@@ -1,0 +1,36 @@
+#!/bin/dash
+
+#Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
+#Distributed under the terms of a MIT license.
+
+export sshopt="-o ConnectTimeout=1 -o ServerAliveInterval=2 \
+-o ServerAliveCountMax=3 -o StrictHostKeyChecking=no \
+-o ControlMaster=auto -o ControlPath=~/.ssh/master-%r@%h:%p"
+
+#client-append-entry:
+#input  command key value
+#output term entry_index success
+
+#this internal function works as wrapper in order to protect via file lock
+#the consistency between the read of last_log_index and the append-entry
+
+read last_log_index   < state/last_log_index
+read current_term     < state/current_term
+read server_role      < temp/server_role
+read hostname         < temp/hostname
+read commit_index     < temp/commit_index
+
+last_log_term=$(basename state-machine-log/$last_log_index/*)
+
+if [ "$server_role" = "leader" ] ; then
+   internals/append-entry $current_term $hostname $last_log_index $last_log_term \
+      $current_term "$1" "$2 $3" $commit_index > temp/${hostname}_append_result
+   read term result < temp/${hostname}_append_result
+   if [ "$term" -eq "$current_term" -a "$result" = "true" ] ; then
+      echo $current_term $(($last_log_index+1)) true
+   else
+      echo $current_term 0 false
+   fi
+else
+   echo $current_term 0 false
+fi

@@ -22,6 +22,13 @@ read cluster_nodes  < conf/cluster_nodes
 
 last_log_term=$(basename state-machine-log/$last_log_index/*)
 
+cluster_nodes_new=""
+cluster_nodes_old_new="$cluster_nodes"
+if [ -f conf/cluster_nodes_new ] ; then
+   read cluster_nodes_new < conf/cluster_nodes_new
+   cluster_nodes_old_new=$(for h in $cluster_nodes $cluster_nodes_new ; do echo $h ; done | sort -u)
+fi
+
 if [ "$election_timeout" -le 0 ] ; then
    #restart election
    cp conf/election_timeout temp/election_timeout
@@ -37,8 +44,9 @@ if [ -z "$voted_for" ] ; then
 fi
 
 if [ "$voted_for" = "$hostname" ] ; then
-   votes=1   #count myself
-   for h in $cluster_nodes ; do
+   votes=1
+
+   for h in $cluster_nodes_old_new ; do
       [ "$h" = "$hostname" ] && continue
       votes=$(($votes+1))
       ssh $sshopt $h cd "'"$PWD"'" \; flock -e -w 0.2 temp/activity_lock \
@@ -49,29 +57,33 @@ if [ "$voted_for" = "$hostname" ] ; then
 
    wait
 
-   majority=$(($votes/2+1))
-   votes=1   #count i voted myself
-   for h in $cluster_nodes ; do
-      [ "$h" = "$hostname" ] && continue
-      read term vote_granted < temp/${h}_vote
-      if [ "$(($term+0))" -eq "$current_term" -a "$vote_granted" = "true" ] ; then
-         votes=$(($votes+1))
-      elif [ "$(($term+0))" -gt "$current_term" -a "$vote_granted" = "false" ] ; then
-         #found a higher term, turn to follower
-         cp conf/election_timeout temp/election_timeout
-         echo ""            > state/voted_for
-         echo follower      > temp/server_role
-         echo "$((term+0))" > state/current_term
-         echo $(date) switching to follower
-         exit
-      fi
+   winner=true
+   for configuration in "$cluster_nodes" "$cluster_nodes_new" ; do
+      i=1; votes=1
+      for h in $configuration ; do
+         [ "$h" = "$hostname" ] && continue
+         read term vote_granted < temp/${h}_vote
+         if [ "$(($term+0))" -eq "$current_term" -a "$vote_granted" = "true" ] ; then
+            votes=$(($votes+1))
+         elif [ "$(($term+0))" -gt "$current_term" -a "$vote_granted" = "false" ] ; then
+            #found a higher term, turn to follower
+            cp conf/election_timeout temp/election_timeout
+            echo ""            > state/voted_for
+            echo follower      > temp/server_role
+            echo "$((term+0))" > state/current_term
+            echo $(date) $h sent a higher term. switching to follower.
+            exit
+         fi
+         i=$(($i+1))
+      done
+      majority=$(($i/2+1))
+      [ "$votes" -lt "$majority" ] && winner=false
    done
 
-   if [ "$votes" -ge "$majority" ] ; then
-      #im the winner!
+   if [ "$winner" = "true" ] ; then
       rm -f temp/*_match_index
       rm -f temp/*_next_index
-      for h in $cluster_nodes ; do
+      for h in $cluster_nodes_old_new ; do
          [ "$h" = "$hostname" ] && continue
          echo $(($last_log_index+1)) > temp/${h}_next_index
          echo 0                      > temp/${h}_match_index
@@ -86,5 +98,5 @@ if [ "$voted_for" = "$hostname" ] ; then
 else
    #already voted for another one.... turn to follower
    echo follower > temp/server_role
-   echo $(date) switching to follower
+   echo $(date) already voted for another host. switching to follower.
 fi

@@ -8,14 +8,29 @@ election_timeout=$(($election_timeout-1))
 echo $election_timeout > temp/election_timeout
 
 if [ "$election_timeout" -le 0 ] ; then
-   #switch to candidate
    cp conf/election_timeout temp/election_timeout
-   echo candidate > temp/server_role
-   echo "" > state/voted_for
-   read current_term < state/current_term
-   current_term=$(($current_term+1))
-   echo $current_term > state/current_term
-   echo $(date) switching to candidate
+   valid_candidate=true
+
+   if [ -f conf/cluster_nodes_new ] ; then
+      read cluster_nodes_new < conf/cluster_nodes_new
+      valid_candidate="false"
+
+      for h in $cluster_nodes_new ; do
+         [ "$h" = "$hostname" ] && valid_candidate="true"
+      done
+   fi
+
+   if [ "$valid_candidate" = "true" ] ; then
+      #switch to candidate
+      echo candidate > temp/server_role
+      echo "" > state/voted_for
+      read current_term < state/current_term
+      current_term=$(($current_term+1))
+      echo $current_term > state/current_term
+      echo $(date) switching to candidate.
+   else
+      echo $(date) continue as follower. not a valid joint candidate.
+   fi
 else
    # apply commited log.....
    . internals/apply-log

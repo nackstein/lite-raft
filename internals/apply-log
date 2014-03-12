@@ -9,14 +9,17 @@ read commit_index     < temp/commit_index
 while [ "$last_log_applied" -lt "$commit_index" ] ; do
    read command key value < $(echo state-machine-log/$(($last_log_applied+1))/*)
    case "$command" in
-      set)
-         mkdir -p state-machine-data/$(dirname "$key")
-         echo "$value" > state-machine-data/"$key"
-      ;;
-      unset)
-         rm -f state-machine-data/"$key"
-         find state-machine-data/$(dirname "$key") -empty -type d -delete
-      ;;
+   set)
+      mkdir -p state-machine-data/$(dirname "$key")
+      echo "$value" > state-machine-data/"$key"
+   ;;
+   unset)
+      rm -f state-machine-data/"$key"
+      find state-machine-data/$(dirname "$key") -empty -type d -delete
+   ;;
+   conf_new)
+      . internals/quitter
+   ;;
    esac
    last_log_applied=$(($last_log_applied+1))
    echo $last_log_applied > temp/last_log_applied

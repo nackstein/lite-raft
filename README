@@ -24,9 +24,6 @@ my mail: luigi.tarenga@gmail.com
 
 enjoy!
 
-ps: many features are not implemented yet, I'm working on
-it. come back to check in few days if something changed!
-
 todo:
 when a conf_old_new command is received the configuration
 is changed, but if the log is deleted by a future leader

@@ -91,7 +91,7 @@ for configuration in "$cluster_nodes" "$cluster_nodes_new" ; do
          match_index=$last_log_index
       else
          read match_index < temp/${h}_match_index
-         read h_follower_timeout < ${h}_follower_timeout
+         read h_follower_timeout < temp/${h}_follower_timeout
          q=$(($q+($h_follower_timeout+$follower_timeout-1)/$follower_timeout))
       fi 
       indexes="$match_index\n$indexes"

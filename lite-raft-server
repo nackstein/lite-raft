@@ -8,9 +8,8 @@ export sshopt="-o ConnectTimeout=1 -o ServerAliveInterval=2 \
 -o ControlMaster=auto -o ControlPath=~/.ssh/master-%r@%h:%p"
 
 cd $(dirname $0)
-
 mkdir -p /dev/shm/lite-raft/temp
-ln -sf /dev/shm/lite-raft/temp temp
+ln -s /dev/shm/lite-raft/temp temp 2> /dev/null
    
 {
    flock -e 9

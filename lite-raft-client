@@ -14,85 +14,14 @@ read current_leader   < temp/current_leader
 read client_timeout   < conf/client_timeout
 read cluster_nodes    < conf/cluster_nodes
 
-#client-append-entry:
-#input  command key value
-#output term entry_index success
-
-check_client_result () {
-   if [ "$success" = "true" ] ; then
-      #inserted: wait for commit
-      flock -e -w 0.1 temp/activity_lock internals/leader
-      read commit_index < temp/commit_index
-      i=0
-      while [ "$commit_index" -lt "$entry_index" -a "$i" -lt "$client_timeout" ] ; do
-         sleep 1
-         i=$(($i+1))
-         read commit_index < temp/commit_index
-      done
-
-      if [ "$commit_index" -ge "$entry_index" -a -f state-machine-log/$entry_index/$term ] ; then
-         echo client succeded >&2
-         echo $term $entry_index
-      else
-         echo timeout waiting for commit >&2
-         echo $term $entry_index
-         exit 1
-      fi
-   else
-      echo client failed to append new entry >&2
-      echo 0 0
-      exit 1
-   fi
-}
-
-
 if ! flock -e -w 0 temp/master_lock true ; then
    if [ "$server_role" = "leader" ] ; then
       case "$1" in
       if|set|unset|noop)
-         {
-            flock -e 9
-            if [ "$1" = "if" ] ; then
-               read quorum_heartbeat < temp/quorum_heartbeat
-               read commit_index     < temp/commit_index
-               read last_log_index   < state/last_log_index
-               if [ "$quorum_heartbeat" = "true" -a "$commit_index" -eq "$last_log_index" ] ; then
-                  read val < state-machine-data/$2
-                  if [ "$val" "$3" "$4" ] ; then
-                     set -- "$5" "$6" "$7"
-                  else
-                     echo value of "$2" does not match "$4" >&2
-                     echo 0 0
-                     exit 1
-                  fi
-               else
-                  echo leader is stale. try again >&2
-                  echo 0 0
-                  exit 1
-               fi
-            fi
-
-            internals/client-append-entry "$@" > temp/client_result
-            read term entry_index success < temp/client_result
-         } 9> temp/activity_lock
-
-         check_client_result
+         flock -e temp/activity_lock internals/client "$@"
       ;;
       get)
-         {
-            flock -s 9
-            read commit_index    < temp/commit_index
-            read last_log_index   < state/last_log_index
-            read quorum_heartbeat < temp/quorum_heartbeat
-         } 9> temp/activity_lock
-         if [ "$quorum_heartbeat" = "true" -a "$commit_index" -eq "$last_log_index" ] ; then
-            #leader has still the quorum and everything is applied
-            read val < state-machine-data/$2
-            echo $val
-         else
-            echo leader is stale. try again >&2
-            exit 1
-         fi
+         flock -s temp/activity_lock internals/client get "$2"
       ;;
       status)
          echo Leader: $hostname
@@ -107,24 +36,10 @@ if ! flock -e -w 0 temp/master_lock true ; then
          done
       ;;
       add-member)
-         {
-            flock -e 9
-            read cluster_nodes < conf/cluster_nodes
-            cluster_nodes_new="$cluster_nodes $2"
-            internals/client-append-entry conf_old_new "$cluster_nodes_new" > temp/client_result
-            read term entry_index success < temp/client_result
-         } 9> temp/activity_lock
-
-         check_client_result
-
-         {
-            flock -e 9
-            internals/client-append-entry conf_new > temp/client_result
-            read term entry_index success < temp/client_result
-         } 9> temp/activity_lock
-
-         check_client_result
-
+         read cluster_nodes < conf/cluster_nodes
+         cluster_nodes_new="$cluster_nodes $2"
+         flock -e temp/activity_lock internals/client conf_old_new "$cluster_nodes_new"
+         flock -e temp/activity_lock internals/client conf_new
       ;;
       esac
 

@@ -8,11 +8,13 @@ election_timeout=$(($election_timeout-1))
 echo $election_timeout > temp/election_timeout
 
 if [ "$election_timeout" -le 0 ] ; then
-   cp conf/election_timeout temp/election_timeout
    valid_candidate=true
+   read c_election_timeout  < conf/election_timeout
+   echo $c_election_timeout > temp/election_timeout
 
    if [ -f conf/cluster_nodes_new ] ; then
       read cluster_nodes_new < conf/cluster_nodes_new
+      read hostname < temp/hostname
       valid_candidate="false"
 
       for h in $cluster_nodes_new ; do

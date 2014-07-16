@@ -1,0 +1,76 @@
+#!/bin/dash
+
+#Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
+#Distributed under the terms of a MIT license.
+
+case $1 in
+get)
+   read commit_index     < temp/commit_index
+   read last_log_index   < state/last_log_index
+   read quorum_heartbeat < temp/quorum_heartbeat
+   if [ "$quorum_heartbeat" = "true" -a "$commit_index" -eq "$last_log_index" ] ; then
+      #leader has still the quorum and everything is applied
+      read val < state-machine-data/$2
+      echo $val
+   else
+      echo leader is stale. try again >&2
+      exit 1
+   fi
+;;
+if|set|unset|noop|conf_old_new|conf_new)
+   read hostname         < temp/hostname
+   read server_role      < temp/server_role
+   read current_term     < state/current_term
+   read last_log_index   < state/last_log_index
+   read commit_index     < temp/commit_index
+   last_log_term=$(basename state-machine-log/$last_log_index/*)
+
+   if [ "$server_role" = "leader" ] ; then
+      if [ "$1" = "if" -a "$5" = "set" ] ; then
+         #this is a conditional set, check if key has the required value
+         read quorum_heartbeat < temp/quorum_heartbeat
+         if [ "$quorum_heartbeat" = "true" -a "$commit_index" -eq "$last_log_index" ] ; then
+            read val < state-machine-data/$2
+            if [ "$val" "$3" "$4" ] ; then
+               set -- "set" "$2" "$6"
+            else
+               echo value of "$2" does not match "$4" >&2
+               echo 0 0
+               exit 5
+            fi
+         else
+            echo leader is stale. try again >&2
+            echo 0 0
+            exit 1
+         fi
+      fi
+
+      internals/append-entry $current_term $hostname $last_log_index $last_log_term \
+         $current_term "$1" "$2 $3" $commit_index > temp/${hostname}_append_result
+      read term result < temp/${hostname}_append_result
+
+      if [ "$term" -eq "$current_term" -a "$result" = "true" ] ; then
+         #append entry returned ok, now try to commit the change
+         entry_index=$(($last_log_index+1))
+         internals/leader
+         read commit_index < temp/commit_index
+
+         if [ "$commit_index" -ge "$entry_index" -a -f state-machine-log/$entry_index/$term ] ; then
+            echo client succeded >&2
+            echo $term $entry_index
+         else
+            echo timeout waiting for commit >&2
+            echo $term $entry_index
+            exit 2
+         fi
+
+      else
+         echo append-entry failed >&2
+         exit 3
+      fi
+   else
+      echo not leader >&2
+      exit 4
+   fi
+;;
+esac

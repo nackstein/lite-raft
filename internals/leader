@@ -65,13 +65,12 @@ for h in $cluster_nodes_old_new; do
          echo ""            > state/voted_for
          echo follower      > temp/server_role
          echo "$((term+0))" > state/current_term
+         echo false         > temp/quorum_heartbeat
          echo $(date) switching to follower
       else
          read h_follower_timeout < temp/${h}_follower_timeout || h_follower_timeout=1
-         if [ "$h_follower_timeout" -gt 0 ] ; then
-            h_follower_timeout=$(($h_follower_timeout-1))
-         fi
-         echo $h_follower_timeout > temp/${h}_follower_timeout
+         #do not put a limit in the negative range. negative values are used by fat-barrel
+         echo $(($h_follower_timeout-1)) > temp/${h}_follower_timeout
       fi
    } &
 done
@@ -92,7 +91,8 @@ for configuration in "$cluster_nodes" "$cluster_nodes_new" ; do
       else
          read match_index < temp/${h}_match_index
          read h_follower_timeout < temp/${h}_follower_timeout
-         q=$(($q+($h_follower_timeout+$follower_timeout-1)/$follower_timeout))
+         #q=$(($q+($h_follower_timeout+$follower_timeout-1)/$follower_timeout))
+         [ "$h_follower_timeout" -eq "$follower_timeout" ] && q=$(($q+1))
       fi 
       indexes="$match_index\n$indexes"
       i=$(($i+1))

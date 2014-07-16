@@ -34,7 +34,7 @@ if ! flock -e -w 0 temp/master_lock true ; then
             [ "$server_role" != "leader" ] && . internals/quitter
          fi
 
-         #append entry if not null (heartbeat)
+         #append entry if not null (null = heartbeat)
          if [ -n "$6" ] ; then
             mkdir -p state-machine-log/$last_log_index
             echo "$6 $7" > state-machine-log/$last_log_index/$5
@@ -51,7 +51,7 @@ if ! flock -e -w 0 temp/master_lock true ; then
          echo "$current_term" true
 
       else
-         #my log diverge send me a previous log!
+         #my log diverge, send me a previous log!
          rm -rf state-machine-log/$last_log_index
          echo "$current_term" false
       fi

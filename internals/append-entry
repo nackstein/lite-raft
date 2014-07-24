@@ -45,8 +45,6 @@ if ! flock -e -w 0 temp/master_lock true ; then
          elif [ "$6" = "conf_new" ] ; then
             #switch to new configuration
             mv conf/cluster_nodes_new conf/cluster_nodes
-            #if necessary follower quit now, leader quit after commit
-            #[ "$server_role" != "leader" ] && . internals/quitter
          fi
 
          #append entry if not null (null = heartbeat)

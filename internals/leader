@@ -68,7 +68,6 @@ for h in $cluster_nodes_old_new; do
             $commit_index > temp/${h}_append_result < /dev/null
 
          read term success < temp/${h}_append_result
-         #read next_index   < temp/${h}_next_index
       fi
 
 
@@ -118,7 +117,6 @@ for configuration in "$cluster_nodes" "$cluster_nodes_new" ; do
       else
          read match_index < temp/${h}_match_index
          read h_follower_timeout < temp/${h}_follower_timeout
-         #q=$(($q+($h_follower_timeout+$follower_timeout-1)/$follower_timeout))
          [ "$h_follower_timeout" -eq "$follower_timeout" ] && q=$(($q+1))
       fi 
       indexes="$match_index\n$indexes"

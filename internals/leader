@@ -35,8 +35,8 @@ for h in $cluster_nodes_old_new; do
          read prev_log_term  < state-machine-snapshot/cur/last_included_term
 
          find state-machine-snapshot/cur | cpio -co | ssh $sshopt $h cd "'"$PWD"'" \; \
-            flock -e -w 0.2 temp/activity_lock internals/install-snapshot $current_term $hostname \
-            $prev_log_index \ prev_log_term > temp/${h}_append_result
+            flock -e -w 0.2 temp/activity_lock internals/install-snapshot \
+            $current_term $hostname > temp/${h}_append_result
 
          read term < temp/${h}_append_result
          success="true"

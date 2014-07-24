@@ -3,9 +3,10 @@
 #Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
 #Distributed under the terms of a MIT license.
 
-export sshopt="-o ConnectTimeout=1 -o ServerAliveInterval=2 \
--o ServerAliveCountMax=3 -o StrictHostKeyChecking=no \
--o ControlMaster=auto -o ControlPath=~/.ssh/master-%r@%h:%p"
+#export sshopt="-q -o ConnectTimeout=1 -o ServerAliveInterval=2 \
+#-o ServerAliveCountMax=3 -o StrictHostKeyChecking=no \
+#-o ControlMaster=auto -o ControlPath=~/.ssh/master-%r@%h:%p"
+export sshopt="-q -o ConnectTimeout=1 -o StrictHostKeyChecking=no"
 cd $(dirname $0)
 
 read server_role      < temp/server_role
@@ -24,7 +25,7 @@ if ! flock -e -w 0 temp/master_lock true ; then
          flock -s temp/activity_lock internals/client get "$2"
       ;;
       status)
-         echo Leader: $hostname
+         echo "Leader:  $hostname"
          for h in $cluster_nodes ; do
             [ "$h" = "$hostname" ] && continue
             read follower_timeout < temp/${h}_follower_timeout
@@ -35,11 +36,26 @@ if ! flock -e -w 0 temp/master_lock true ; then
             fi
          done
       ;;
-      add-member)
+      add-member|del-member)
          read cluster_nodes < conf/cluster_nodes
          cluster_nodes_new="$cluster_nodes $2"
-         flock -e temp/activity_lock internals/client conf_old_new "$cluster_nodes_new"
-         flock -e temp/activity_lock internals/client conf_new
+         if [ "$1" = "del-member" ] ; then
+            cluster_nodes_new=$(for h in $cluster_nodes; do [ "$h" != "$2" ] && echo -n "$h "; done)
+         fi
+         [ "$1" = "add-member" ] && ssh $sshopt $2 $PWD/lite-raft first-boot
+         echo inserting conf_old_new.
+         if flock -e temp/activity_lock internals/client conf_old_new "$cluster_nodes_new" ; then
+            echo conf_old_new committed.
+            echo inserting conf_new.
+            if flock -e temp/activity_lock internals/client conf_new ; then
+               echo conf_new committed.
+               [ "$1" = "del-member" ] && ssh $sshopt $2 $PWD/lite-raft stop
+            else
+               echo returned error $?
+            fi
+         else
+            echo returned error $?
+         fi
       ;;
       esac
 

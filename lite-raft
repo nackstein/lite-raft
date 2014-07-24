@@ -5,18 +5,26 @@
 
 set -e
 
-export sshopt="-o ConnectTimeout=1 -o StrictHostKeyChecking=no"
+#export sshopt="-o ConnectTimeout=1 -o StrictHostKeyChecking=no"
 cd $(dirname $0)
 
 case "$1" in
 first-boot)
+   if [ -f temp/master_lock ] ; then
+      if ! flock -e -w 0 temp/master_lock true ; then
+         echo temp/master_lock is locked. cannot initialize state-machine.
+         exit 1
+      fi
+   fi
    echo first-boot
-   rm -rf state temp state-machine-log state-machine-data /dev/shm/lite-raft/temp
-   mkdir -p state state-machine-log/0 state-machine-data message-log
+   rm -rf state temp state-machine-log state-machine-data state-machine-snapshot /dev/shm/lite-raft/temp
+   mkdir -p state state-machine-log/0 state-machine-data state-machine-snapshot/cur message-log
    touch state-machine-log/0/0
    echo 0  > state/current_term
    echo 0  > state/last_log_index
    echo "" > state/voted_for
+   echo 0  > state-machine-snapshot/last_included_term
+   echo 0  > state-machine-snapshot/last_included_index
    ./lite-raft-server > message-log/lite-raft-server.log &
 ;;
 start)
@@ -25,21 +33,5 @@ start)
 stop)
    echo stop
    pkill -f "/bin/dash ./lite-raft-server"
-;;
-check)
-   echo check
-;;
-status)
-   echo status
-;;
-query)
-;;
-dummy)
-   echo dummy test
-   ./lite-raft-client set the-answer 42
-;;
-dummy2)
-   echo dummy test2
-   ./lite-raft-client get the-answer
 ;;
 esac

@@ -1,0 +1,16 @@
+#!/bin/dash
+
+#Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
+#Distributed under the terms of a MIT license.
+
+cd $(dirname $0)
+
+echo current_leader $(cat temp/current_leader) 
+echo server_role    $(cat temp/server_role) 
+echo last_log_index $(cat state/last_log_index)
+echo commit_index   $(cat temp/commit_index)
+echo listing last 20 log entries
+for i in $(ls state-machine-log | sort -n | tail -20 ) ; do
+    term=$(basename state-machine-log/$i/*)
+    echo index: $i term: $term entry: $(cat state-machine-log/$i/$term)
+done

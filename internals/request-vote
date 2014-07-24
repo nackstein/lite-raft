@@ -28,7 +28,15 @@ if ! flock -e -w 0 temp/master_lock true ; then
          echo follower > temp/server_role
          echo "$current_term" > state/current_term
       fi
-      if [ "$3" -ge "$last_log_index" -a "$4" -ge "$(basename state-machine-log/$last_log_index/*)" ] ; then
+
+      if [ -d state-machine-log/"$last_log_index" ] ; then
+         last_log_term=$(echo state-machine-log/$last_log_index/*)
+         last_log_term=${last_log_term##state-machine-log/*/}
+      else
+         read last_log_term < state-machine-snapshot/cur/last_included_term
+      fi
+      
+      if [ "$3" -ge "$last_log_index" -a "$4" -ge "$last_log_term" ] ; then
          if [ -z "$voted_for" ] ; then
             #first time I vote for you, reset election_timeout
             cp conf/election_timeout temp/election_timeout

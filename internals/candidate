@@ -20,7 +20,12 @@ read hostname       < temp/hostname
 read commit_index   < temp/commit_index
 read cluster_nodes  < conf/cluster_nodes
 
-last_log_term=$(basename state-machine-log/$last_log_index/*)
+if [ -d state-machine-log/"$last_log_index" ] ; then
+   last_log_term=$(echo state-machine-log/"$last_log_index"/*)
+   last_log_term=${last_log_term##state-machine-log/*/}
+else
+   read last_log_term < state-machine-snapshot/cur/last_included_term
+fi
 
 cluster_nodes_new=""
 cluster_nodes_old_new="$cluster_nodes"
@@ -35,7 +40,7 @@ if [ "$election_timeout" -le 0 ] ; then
    echo "" > state/voted_for
    current_term=$(($current_term+1))
    echo $current_term > state/current_term
-   echo $(date) restarting election
+   echo $(date) restarting election.
 fi
 
 if [ -z "$voted_for" ] ; then
@@ -51,8 +56,7 @@ if [ "$voted_for" = "$hostname" ] ; then
       votes=$(($votes+1))
       ssh $sshopt $h cd "'"$PWD"'" \; flock -e -w 0.2 temp/activity_lock \
          internals/request-vote $current_term $hostname $last_log_index \
-         $(basename state-machine-log/$last_log_index/*) \
-         > temp/${h}_vote < /dev/null &
+         $last_log_term > temp/${h}_vote < /dev/null &
    done
 
    wait
@@ -70,7 +74,7 @@ if [ "$voted_for" = "$hostname" ] ; then
             cp conf/election_timeout temp/election_timeout
             echo ""            > state/voted_for
             echo follower      > temp/server_role
-            echo "$((term+0))" > state/current_term
+            echo "$(($term+0))" > state/current_term
             echo $(date) $h sent a higher term. switching to follower.
             exit
          fi
@@ -93,7 +97,7 @@ if [ "$voted_for" = "$hostname" ] ; then
       echo $hostname > temp/current_leader
       internals/append-entry $current_term $hostname $last_log_index $last_log_term \
          $current_term noop "" $commit_index > temp/${hostname}_append_result
-      echo $(date) switching to leader
+      echo $(date) switching to leader.
    fi
 else
    #already voted for another one.... turn to follower

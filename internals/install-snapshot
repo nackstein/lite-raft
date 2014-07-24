@@ -1,0 +1,41 @@
+#!/bin/dash
+
+#Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
+#Distributed under the terms of a MIT license.
+
+#install-snapshot:
+#the parameters are a little different that from the official implementation.
+#actually we don't need "offset" and "done", while "data" is passed as stdin
+#input  term leader_id last_included_index last_included_term
+#        $1   $2
+#output term
+
+read current_term    < state/current_term
+
+if ! flock -e -w 0 temp/master_lock true ; then
+   if [ "$1" -ge "$current_term" ] ; then
+
+      echo follower > temp/server_role
+      echo "$1" > state/current_term
+      echo "$2" > temp/current_leader
+      cp conf/election_timeout temp/election_timeout
+
+      # create new snapshot directory
+      rm -rf state-machine-snapshot/cur
+      rm -rf state-machine-data state-machine-log
+      mkdir state-machine-log
+      cpio -ci
+      cp state-machine-snapshot/cur/cluster_nodes* conf/
+      cp -r state-machine-snapshot/cur/state-machine-data .
+      cp state-machine-snapshot/cur/last_included_index temp/last_log_applied
+      cp state-machine-snapshot/cur/last_included_index temp/commit_index
+      cp state-machine-snapshot/cur/last_included_index state/last_log_index
+         
+   else
+      #return term to update leader
+      echo $current_term
+   fi
+else
+   #no process running here, return term 0 as error
+   echo 0
+fi

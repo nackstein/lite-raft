@@ -3,9 +3,10 @@
 #Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
 #Distributed under the terms of a MIT license.
 
-export sshopt="-o ConnectTimeout=1 -o ServerAliveInterval=2 \
--o ServerAliveCountMax=3 -o StrictHostKeyChecking=no \
--o ControlMaster=auto -o ControlPath=~/.ssh/master-%r@%h:%p"
+#export sshopt="-q -o ConnectTimeout=1 -o ServerAliveInterval=2 \
+#-o ServerAliveCountMax=3 -o StrictHostKeyChecking=no \
+#-o ControlMaster=auto -o ControlPath=~/.ssh/master-%r@%h:%p"
+export sshopt="-q -o ConnectTimeout=1 -o StrictHostKeyChecking=no"
 
 cd $(dirname $0)
 mkdir -p /dev/shm/lite-raft/temp
@@ -14,6 +15,7 @@ ln -s /dev/shm/lite-raft/temp temp 2> /dev/null
 {
    flock -e 9
     
+   echo ""       > temp/current_leader
    echo follower > temp/server_role
    echo 0        > temp/last_log_applied
    echo 0        > temp/commit_index
@@ -24,26 +26,27 @@ ln -s /dev/shm/lite-raft/temp temp 2> /dev/null
    read hostname < temp/hostname
    read cluster_nodes < conf/cluster_nodes
 
-   valid_member="false"
-   for h in $cluster_nodes ; do
-      [ "$h" = "$hostname" ] && valid_member="true"
-   done
+   #valid_member="false"
+   #for h in $cluster_nodes ; do
+   #   [ "$h" = "$hostname" ] && valid_member="true"
+   #done
 
-   if [ "$valid_member" = "false" ] ; then
-      echo this host is not member of the cluster
-      exit 1
-   fi
+   #if [ "$valid_member" = "false" ] ; then
+   #   echo this host is not member of the cluster
+   #   exit 1
+   #fi
    
    #cluster_nodes=$(for h in $cluster_nodes ; do echo $h ; done | sort -u)
    #echo $cluster_nodes > conf/cluster_nodes
    
-   echo $(date) starting as follower
+   echo $(date) starting as follower.
    while true ; do
-      for h in $cluster_nodes ; do
-         if [ "$h" != "$hostname" ] ; then
-            [ -S ~/.ssh/master-${USER}@$h:22 ] || ssh -MNf $sshopt root@$h &
-         fi
-      done
+      # WARNING the master process of sshd keep the lock even after lite-raft quitted
+      #for h in $cluster_nodes ; do
+      #   if [ "$h" != "$hostname" ] ; then
+      #      [ -S ~/.ssh/master-${USER}@$h:22 ] || ssh -MNf $sshopt root@$h &
+      #   fi
+      #done
       read server_role < temp/server_role
       sleep 1 &
       case "$server_role" in 
@@ -59,9 +62,20 @@ ln -s /dev/shm/lite-raft/temp temp 2> /dev/null
          flock -e -w 1 temp/activity_lock internals/leader
        ;;
        quitter)
+         #gives leader some time to commit the conf_new entry
+         sleep 10 
          exit
        ;;
       esac
+
+      if [ -f state-machine-snapshot/cur/last_included_index ] ; then
+         read first_log_index < state-machine-snapshot/cur/last_included_index
+      fi
+      read last_log_index < state/last_log_index
+      if [ $(($last_log_index-$first_log_index+0)) -gt 20 ] ; then
+         flock -e -w 1 temp/activity_lock internals/create-snapshot
+      fi
+
       wait
    done
    

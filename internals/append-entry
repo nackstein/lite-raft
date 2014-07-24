@@ -15,23 +15,38 @@ read server_role     < temp/server_role
 last_log_index=$(($3+1))
 
 if ! flock -e -w 0 temp/master_lock true ; then
-   if [ "$1" -gt "$current_term" -o "$server_role" = "candidate" ] ; then
+   if [ "$1" -gt "$current_term" ] ; then
       current_term="$1"
       echo follower > temp/server_role
       echo "$current_term" > state/current_term
    fi
 
    if [ "$1" -eq "$current_term" ] ; then
+      if [ "$server_role" = "candidate" ] ; then
+         echo follower > temp/server_role
+      fi
+
+      log_diverge="true"
       if [ -f state-machine-log/"$3"/"$4" ] ; then
+         log_diverge="false"
+      elif [ -f state-machine-snapshot/cur/last_included_index -a -f state-machine-snapshot/cur/last_included_term ] ; then
+         read last_included_index < state-machine-snapshot/cur/last_included_index
+         read last_included_term  < state-machine-snapshot/cur/last_included_term
+         if [ "$last_included_index" -eq "$3" -a "$last_included_term" -eq "$4" ] ; then
+            log_diverge="false"
+         fi
+      fi
+
+      if [ "$log_diverge" = "false" ] ; then
          rm -rf state-machine-log/$last_log_index
          if [ "$6" = "conf_old_new" ] ; then
             #received a joint consensus command (Cold.new)
-            echo "$7"  > conf/cluster_nodes_new
+            echo "$7"                   > conf/cluster_nodes_new
          elif [ "$6" = "conf_new" ] ; then
             #switch to new configuration
             mv conf/cluster_nodes_new conf/cluster_nodes
-            #follower quit now, leader quit after commit
-            [ "$server_role" != "leader" ] && . internals/quitter
+            #if necessary follower quit now, leader quit after commit
+            #[ "$server_role" != "leader" ] && . internals/quitter
          fi
 
          #append entry if not null (null = heartbeat)
@@ -39,12 +54,13 @@ if ! flock -e -w 0 temp/master_lock true ; then
             mkdir -p state-machine-log/$last_log_index
             echo "$6 $7" > state-machine-log/$last_log_index/$5
             echo "$last_log_index" > state/last_log_index
-            if [ "$8" -gt "$commit_index" ] ; then
-               if [ "$8" -lt "$last_log_index" ] ; then
-                  echo "$8" > temp/commit_index
-               else
-                  echo "$last_log_index" > temp/commit_index
-               fi
+         fi
+
+         if [ "$8" -gt "$commit_index" ] ; then
+            if [ "$8" -lt "$last_log_index" ] ; then
+               echo "$8" > temp/commit_index
+            else
+               echo "$last_log_index" > temp/commit_index
             fi
          fi
          #sync

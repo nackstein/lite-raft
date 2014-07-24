@@ -23,7 +23,13 @@ if|set|unset|noop|conf_old_new|conf_new)
    read current_term     < state/current_term
    read last_log_index   < state/last_log_index
    read commit_index     < temp/commit_index
-   last_log_term=$(basename state-machine-log/$last_log_index/*)
+
+   if [ -d state-machine-log/"$last_log_index" ] ; then
+      last_log_term=$(echo state-machine-log/"$last_log_index"/*)
+      last_log_term=${last_log_term##state-machine-log/*/}
+   else
+      read last_log_term < state-machine-snapshot/cur/last_included_term
+   fi
 
    if [ "$server_role" = "leader" ] ; then
       if [ "$1" = "if" -a "$5" = "set" ] ; then
@@ -45,6 +51,16 @@ if|set|unset|noop|conf_old_new|conf_new)
          fi
       fi
 
+      if [ "$1" = "conf_old_new" ] ; then
+         for h in $2 ; do
+            [ "$h" = "$hostname" ] && continue
+            [ -f temp/${h}_next_index  ] && continue
+            echo $(($last_log_index+1)) > temp/${h}_next_index
+            echo 0                      > temp/${h}_match_index
+            echo 1                      > temp/${h}_follower_timeout
+         done
+      fi
+
       internals/append-entry $current_term $hostname $last_log_index $last_log_term \
          $current_term "$1" "$2 $3" $commit_index > temp/${hostname}_append_result
       read term result < temp/${hostname}_append_result
@@ -57,10 +73,10 @@ if|set|unset|noop|conf_old_new|conf_new)
 
          if [ "$commit_index" -ge "$entry_index" -a -f state-machine-log/$entry_index/$term ] ; then
             echo client succeded >&2
-            echo $term $entry_index
+            #echo $term $entry_index
          else
             echo timeout waiting for commit >&2
-            echo $term $entry_index
+            #echo $term $entry_index
             exit 2
          fi
 

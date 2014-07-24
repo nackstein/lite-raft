@@ -1,0 +1,39 @@
+#!/bin/dash
+
+#Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
+#Distributed under the terms of a MIT license.
+
+read last_log_applied < temp/last_log_applied
+
+if [ -d state-machine-log/"$last_log_applied" ] ; then
+   last_applied_term=$(echo state-machine-log/"$last_log_applied"/*)
+   last_applied_term=${last_applied_term##state-machine-log/*/}
+else
+   read last_applied_term < state-machine-snapshot/cur/last_included_term
+fi
+
+rm -rf state-machine-snapshot/new
+
+if [ -d state-machine-snapshot/tmp ] ; then
+   if [ -d state-machine-snapshot/cur ] ; then
+      rm -rf state-machine-snapshot/tmp
+   else
+      mv state-machine-snapshot/tmp state-machine-snapshot/cur
+   fi 
+fi
+
+mkdir state-machine-snapshot/new/
+mv state-machine-snapshot/cur state-machine-snapshot/tmp
+
+if cp -r conf/cluster_nodes* state-machine-data state-machine-snapshot/new/ ; then
+   echo $last_log_applied  > state-machine-snapshot/new/last_included_index
+   echo $last_applied_term > state-machine-snapshot/new/last_included_term
+   mv state-machine-snapshot/new state-machine-snapshot/cur
+   rm -rf state-machine-snapshot/tmp
+
+   # remove old log not needed anymore
+   ls state-machine-log/ | sort -n | while read log ; do
+      [ "$log" -gt "$last_log_applied" ] && break
+      rm -rf state-machine-log/$log
+   done
+fi

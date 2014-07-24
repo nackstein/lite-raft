@@ -1,0 +1,89 @@
+#!/bin/dash
+
+#
+# this script should run on every node that can run a package.
+# for each package an instance of package_controller is started on
+# selected nodes. when this script detect that the tick of one
+# package is not incrementing a race starts after $package_timeout
+# seconds and the winner of the race set his own hostname as package
+# owner. the package owner is responsible for starting the package
+# and monitor it.
+#
+
+PATH=$(dirname $0):$PATH
+
+package=$1
+role="stand-by"
+
+echo "trying to get package timeout "
+while ! package_timeout=$(lite-raft-client get packages/$package/timeout) ; do
+   echo -n .
+   sleep 1
+done
+echo " done."
+timeout=$package_timeout
+pace=4
+last_tick=0
+last_owner=""
+
+while true ; do
+
+   sleep $pace
+
+   case $role in
+
+   stand-by)
+      tick=$(lite-raft-client get packages/$package/tick) || continue
+      if [ $(($tick+0)) -gt $last_tick ] ; then
+         #tick incremented so there is an active package-controller
+         timeout=$package_timeout
+      else
+         timeout=$(($package_timeout-$pace))
+      fi
+      last_tick=$tick
+
+      owner=$(lite-raft-client get packages/$package/owner) || continue
+      if [ "$owner" != "$last_owner" ] ; then
+         timeout=$package_timeout
+         last_owner="$owner"
+      fi
+
+      if [ $timeout -le 0 ] ; then
+         if lite-raft-client if packages/$package/owner = $last_owner set $hostname ; then
+            role="active"
+            timeout=$package_timeout
+         fi
+      fi
+
+   ;;
+   active)
+      if tick=$(lite-raft-client get packages/$package/tick) ; then
+         timeout=$package_timeout
+         tick=$(($tick+1))
+         lite-raft-client set packages/$package/tick $tick
+      else
+         timeout=$(($timeout-$pace))
+      fi
+
+      if [ $timeout -le 0 ] ; then
+         role=failed
+
+      fi
+
+      package_enabled=$(lite-raft-client get packages/$package/enabled)
+      if [ "$package_enabled" = "true" ] ; then
+      #   run package
+         :
+      else
+      #   stop package
+         :
+      fi
+      
+   ;;
+   failed)
+      #stop package
+   ;;
+
+   esac
+
+done

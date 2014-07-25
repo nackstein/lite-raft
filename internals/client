@@ -11,8 +11,13 @@ get)
    if [ "$quorum_heartbeat" = "true" -a "$commit_index" -eq "$last_log_index" ] ; then
       #leader has still the quorum and everything is applied
       if [ -n "$2" ] ; then
-         read val < state-machine-data/$2
-         echo $val
+         if [ -f state-machine-data/"$2" ] ; then
+            read val < state-machine-data/"$2"
+            echo $val
+         else
+            echo key "$2" does not exit. >&2
+            exit 1
+         fi
       else
          echo null
       fi
@@ -40,17 +45,21 @@ if|set|unset|noop|conf_old_new|conf_new)
          #this is a conditional set, check if key has the required value
          read quorum_heartbeat < temp/quorum_heartbeat
          if [ "$quorum_heartbeat" = "true" -a "$commit_index" -eq "$last_log_index" ] ; then
-            read val < state-machine-data/$2
-            if [ "$val" "$3" "$4" ] ; then
-               set -- "set" "$2" "$6"
+            if [ -f state-machine-data/"$2" ] ; then
+               read val < state-machine-data/"$2"
+               if [ "$val" "$3" "$4" ] ; then
+                  #change positional paramter to perform a normal "set" in append-entry below
+                  set -- "set" "$2" "$6"
+               else
+                  echo value of "$2" does not match "$4" >&2
+                  exit 5
+               fi
             else
-               echo value of "$2" does not match "$4" >&2
-               echo 0 0
-               exit 5
+               echo key "$2" does not exit. >&2
+               exit 1
             fi
          else
             echo leader is stale. try again >&2
-            echo 0 0
             exit 1
          fi
       fi
@@ -77,10 +86,8 @@ if|set|unset|noop|conf_old_new|conf_new)
 
          if [ "$commit_index" -ge "$entry_index" -a -f state-machine-log/$entry_index/$term ] ; then
             echo client succeded >&2
-            #echo $term $entry_index
          else
             echo timeout waiting for commit >&2
-            #echo $term $entry_index
             exit 2
          fi
 

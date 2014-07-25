@@ -10,8 +10,12 @@ get)
    read quorum_heartbeat < temp/quorum_heartbeat
    if [ "$quorum_heartbeat" = "true" -a "$commit_index" -eq "$last_log_index" ] ; then
       #leader has still the quorum and everything is applied
-      read val < state-machine-data/$2
-      echo $val
+      if [ -n "$2" ] ; then
+         read val < state-machine-data/$2
+         echo $val
+      else
+         echo null
+      fi
    else
       echo leader is stale. try again >&2
       exit 1

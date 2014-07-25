@@ -110,27 +110,31 @@ quorum_heartbeat=true
 N=$last_log_index
 
 for configuration in "$cluster_nodes" "$cluster_nodes_new" ; do
-   i=0; q=1; indexes=""
-   for h in $configuration ; do
-      if [ "$h" = "$hostname" ] ; then
-         match_index=$last_log_index
-      else
-         read match_index < temp/${h}_match_index
-         read h_follower_timeout < temp/${h}_follower_timeout
-         [ "$h_follower_timeout" -eq "$follower_timeout" ] && q=$(($q+1))
-      fi 
-      indexes="$match_index\n$indexes"
-      i=$(($i+1))
-   done
-   majority=$(($i/2+1))
-   majority_match=$commit_index
-   for match_index in $(printf "$indexes" | sort -n | head -n $((($i+1)/2))) ; do
-      if [ "$match_index" -gt "$commit_index" -a -f state-machine-log/$match_index/$current_term ] ; then
-         majority_match=$match_index
-      fi
-   done
-   [ "$majority_match" -lt "$N" -a "$majority_match" -ge "$commit_index" -a -n "$configuration" ] && N=$majority_match
-   [ "$q" -lt "$majority" ] && quorum_heartbeat=false
+   if [ -n "$configuration" ] ; then
+      i=0; q=1; indexes=""
+      for h in $configuration ; do
+         if [ "$h" = "$hostname" ] ; then
+            match_index=$last_log_index
+         else
+            read match_index < temp/${h}_match_index
+            read h_follower_timeout < temp/${h}_follower_timeout
+            [ "$h_follower_timeout" -eq "$follower_timeout" ] && q=$(($q+1))
+         fi 
+         indexes="$match_index\n$indexes"
+         i=$(($i+1))
+      done
+
+      majority=$(($i/2+1))
+      majority_match=$commit_index
+      for match_index in $(printf "$indexes" | sort -n | head -n $((($i+1)/2))) ; do
+         if [ "$match_index" -gt "$commit_index" -a -f state-machine-log/$match_index/$current_term ] ; then
+            majority_match=$match_index
+         fi
+      done
+
+      [ "$majority_match" -lt "$N" -a "$majority_match" -ge "$commit_index" ] && N=$majority_match
+      [ "$q" -lt "$majority" ] && quorum_heartbeat=false
+   fi 
 done
 
 if [ "$N" -gt "$commit_index" -a -f state-machine-log/$N/$current_term ] ; then

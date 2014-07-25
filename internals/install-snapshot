@@ -24,7 +24,7 @@ if ! flock -e -w 0 temp/master_lock true ; then
       # create new snapshot directory
       rm -rf state-machine-snapshot/cur
       rm -rf state-machine-data state-machine-log
-      mkdir state-machine-log
+      mkdir -p state-machine-log
       cpio -ci
       cp state-machine-snapshot/cur/cluster_nodes* conf/
       cp -r state-machine-snapshot/cur/state-machine-data .

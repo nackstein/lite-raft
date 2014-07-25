@@ -7,18 +7,22 @@ export sshopt="-q -o ConnectTimeout=1 -o StrictHostKeyChecking=no"
 
 cd $(dirname $0)
 mkdir -p /dev/shm/lite-raft/temp
-ln -s /dev/shm/lite-raft/temp temp 2> /dev/null
-   
+
 {
    flock -e 9
     
    echo ""       > temp/current_leader
    echo follower > temp/server_role
-   echo 0        > temp/last_log_applied
    echo 0        > temp/commit_index
    echo false    > temp/quorum_heartbeat
    cp conf/election_timeout temp/election_timeout
    
+   if [ -f state-machine-snapshot/cur/last_included_index ] ; then
+      cp state-machine-snapshot/cur/last_included_index temp/last_log_applied
+   else
+      echo 0 > temp/last_log_applied
+   fi
+
    hostname -s > temp/hostname
    read hostname < temp/hostname
    read cluster_nodes < conf/cluster_nodes
@@ -39,18 +43,14 @@ ln -s /dev/shm/lite-raft/temp temp 2> /dev/null
        leader)
          flock -e -w 1 temp/activity_lock internals/leader
        ;;
-       quitter)
-         #gives leader some time to commit the conf_new entry
-         sleep 10 
-         exit
-       ;;
       esac
 
+      first_log_index=0
       if [ -f state-machine-snapshot/cur/last_included_index ] ; then
          read first_log_index < state-machine-snapshot/cur/last_included_index
       fi
       read last_log_index < state/last_log_index
-      if [ $(($last_log_index-$first_log_index+0)) -gt 20 ] ; then
+      if [ $(($last_log_index-$first_log_index)) -gt 20 ] ; then
          flock -e -w 1 temp/activity_lock internals/create-snapshot
       fi
 

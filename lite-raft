@@ -17,17 +17,21 @@ first-boot)
       fi
    fi
    echo first-boot
-   rm -rf state temp state-machine-log state-machine-data state-machine-snapshot /dev/shm/lite-raft/temp
-   mkdir -p state state-machine-log/0 state-machine-data state-machine-snapshot/cur message-log
+   rm -rf   state state-machine-log   state-machine-data state-machine-snapshot /dev/shm/lite-raft/temp
+   mkdir -p state state-machine-log/0 state-machine-data state-machine-snapshot /dev/shm/lite-raft/temp
    touch state-machine-log/0/0
    echo 0  > state/current_term
    echo 0  > state/last_log_index
    echo "" > state/voted_for
-   echo 0  > state-machine-snapshot/last_included_term
-   echo 0  > state-machine-snapshot/last_included_index
    ./lite-raft-server > message-log/lite-raft-server.log &
 ;;
 start)
+   if [ -f temp/master_lock ] ; then
+      if ! flock -e -w 0 temp/master_lock true ; then
+         echo temp/master_lock is locked. server already started.
+         exit 1
+      fi
+   fi
    ./lite-raft-server > message-log/lite-raft-server.log &
 ;;
 stop)

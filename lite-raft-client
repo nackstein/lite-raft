@@ -15,7 +15,14 @@ read cluster_nodes    < conf/cluster_nodes
 if ! flock -e -w 0 temp/master_lock true ; then
    if [ "$server_role" = "leader" ] ; then
       case "$1" in
-      if|set|unset|noop)
+      if|set|unset)
+         if [ -z "$2" ] ; then
+            echo missing argument
+            exit 1
+         fi
+         flock -e temp/activity_lock internals/client "$@"
+      ;;
+      noop)
          flock -e temp/activity_lock internals/client "$@"
       ;;
       get)
@@ -34,6 +41,10 @@ if ! flock -e -w 0 temp/master_lock true ; then
          done
       ;;
       add-member|del-member)
+         if [ -z "$2" ] ; then
+            echo missing argument
+            exit 1
+         fi
          read cluster_nodes < conf/cluster_nodes
          cluster_nodes_new="$cluster_nodes $2"
          if [ "$1" = "del-member" ] ; then

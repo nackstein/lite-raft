@@ -22,8 +22,10 @@ if [ -d state-machine-snapshot/tmp ] ; then
    fi 
 fi
 
-mkdir state-machine-snapshot/new/
-mv state-machine-snapshot/cur state-machine-snapshot/tmp
+mkdir -p state-machine-snapshot/new
+if [ -d state-machine-snapshot/cur ] ; then
+   mv state-machine-snapshot/cur state-machine-snapshot/tmp
+fi
 
 if cp -r conf/cluster_nodes* state-machine-data state-machine-snapshot/new/ ; then
    echo $last_log_applied  > state-machine-snapshot/new/last_included_index

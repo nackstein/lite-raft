@@ -12,8 +12,9 @@ read current_term    < state/current_term
 read commit_index    < temp/commit_index
 read server_role     < temp/server_role
 read current_leader  < temp/current_leader
+read last_log_index  < state/last_log_index
 
-last_log_index=$(($3+1))
+entry_index=$(($3+1))
 
 if ! flock -e -w 0 temp/master_lock true ; then
    if [ "$1" -gt "$current_term" ] ; then
@@ -39,7 +40,7 @@ if ! flock -e -w 0 temp/master_lock true ; then
       fi
 
       if [ "$log_diverge" = "false" ] ; then
-         rm -rf state-machine-log/$last_log_index
+         rm -rf state-machine-log/$entry_index
          if [ "$6" = "conf_old_new" ] ; then
             #received a joint consensus command (Cold.new)
             echo "$7"                   > conf/cluster_nodes_new
@@ -50,8 +51,9 @@ if ! flock -e -w 0 temp/master_lock true ; then
 
          #append entry if not null (null = heartbeat)
          if [ -n "$6" ] ; then
-            mkdir -p state-machine-log/$last_log_index
-            echo "$6 $7" > state-machine-log/$last_log_index/$5
+            mkdir -p state-machine-log/$entry_index
+            echo "$6 $7" > state-machine-log/$entry_index/$5
+            last_log_index=$entry_index
             echo "$last_log_index" > state/last_log_index
          fi
 
@@ -67,7 +69,7 @@ if ! flock -e -w 0 temp/master_lock true ; then
 
       else
          #my log diverge, send me a previous log!
-         rm -rf state-machine-log/$last_log_index
+         rm -rf state-machine-log/$entry_index
          echo "$current_term" false
       fi
       [ "$2" != "$current_leader" ] && echo "$2" > temp/current_leader

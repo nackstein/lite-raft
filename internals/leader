@@ -27,20 +27,11 @@ for h in $cluster_nodes_old_new; do
    {
       read match_index < temp/${h}_match_index
       read next_index  < temp/${h}_next_index
+      read follower_heartbeat < temp/${h}_follower_heartbeat
 
-      if [ "$last_log_index" -ge "$next_index" -a ! -d state-machine-log/"$next_index" ] ; then
-         # the log does not exist anymore, send a snapshot
-         read prev_log_index < state-machine-snapshot/cur/last_included_index
-         read prev_log_term  < state-machine-snapshot/cur/last_included_term
-
-         find state-machine-snapshot/cur | cpio -co | ssh $sshopt $h cd "'"$PWD"'" \; \
-            flock -e -w 0.2 temp/activity_lock internals/install-snapshot \
-            $current_term $hostname > temp/${h}_append_result
-
-         read term < temp/${h}_append_result
-         success="true"
-      else
-
+         
+      if [ "$last_log_index" -ge "$next_index" -a -d state-machine-log/"$next_index" ] ; then
+         #send entry
          prev_log_index=$(($next_index-1))
          if [ -d state-machine-log/$prev_log_index ] ; then
             prev_log_term=$(echo state-machine-log/$prev_log_index/*)
@@ -48,27 +39,47 @@ for h in $cluster_nodes_old_new; do
          else
             read prev_log_term < state-machine-snapshot/cur/last_included_term
          fi
-
-         if [ "$last_log_index" -ge "$next_index" ] ; then
-            #send entry
-            entry_term=$(echo state-machine-log/$next_index/*)
-            entry_term=${entry_term##state-machine-log/*/}
-            read entry_command entry_value < $(echo state-machine-log/$next_index/$entry_term)
-         else
-            #send heartbeat
-            entry_term=""
-            entry_command=""
-            entry_value=""
-         fi
-
+         entry_term=$(echo state-machine-log/$next_index/*)
+         entry_term=${entry_term##state-machine-log/*/}
+         read entry_command entry_value < $(echo state-machine-log/$next_index/$entry_term)
+         
          ssh $sshopt $h cd "'"$PWD"'" \; flock -e -w 0.2 temp/activity_lock \
             internals/append-entry $current_term $hostname $prev_log_index \
             $prev_log_term "'"$entry_term"'" "'"$entry_command"'" "'"$entry_value"'" \
             $commit_index > temp/${h}_append_result < /dev/null
 
          read term success < temp/${h}_append_result
-      fi
 
+      elif [ "$last_log_index" -lt "$next_index" -o "$follower_heartbeat" -eq 0 ] ; then
+         #send heartbeat
+         prev_log_index=$(($next_index-1))
+         if [ -d state-machine-log/$prev_log_index ] ; then
+            prev_log_term=$(echo state-machine-log/$prev_log_index/*)
+            prev_log_term=${prev_log_term##state-machine-log/*/}
+         else
+            read prev_log_index < state-machine-snapshot/cur/last_included_index
+            read prev_log_term  < state-machine-snapshot/cur/last_included_term
+            next_index=$(($prev_log_index+1))
+         fi
+
+         ssh $sshopt $h cd "'"$PWD"'" \; flock -e -w 0.2 temp/activity_lock \
+            internals/append-entry $current_term $hostname $prev_log_index \
+            $prev_log_term "''" "''" "''" $commit_index > temp/${h}_append_result < /dev/null
+
+         read term success < temp/${h}_append_result
+
+      elif [ "$last_log_index" -ge "$next_index" -a ! -d state-machine-log/"$next_index" ] ; then
+         #send snapshot. the log does not exist anymore and the follower is alive
+         read prev_log_index < state-machine-snapshot/cur/last_included_index
+         read prev_log_term  < state-machine-snapshot/cur/last_included_term
+
+         find state-machine-snapshot/cur | cpio -co --quiet | ssh $sshopt $h cd "'"$PWD"'" \; \
+            flock -e -w 0.2 temp/activity_lock internals/install-snapshot \
+            $current_term $hostname > temp/${h}_append_result
+
+         read term < temp/${h}_append_result
+         success="true"
+      fi
 
       if [ "$(($term+0))" -eq "$current_term" -a "$success" = "true" ] ; then
          if [ "$last_log_index" -ge "$next_index" ] ; then
@@ -79,11 +90,11 @@ for h in $cluster_nodes_old_new; do
             #sent heartbeat
             :
          fi
-         echo 1                  > temp/${h}_follower_timeout
+         echo 1                  > temp/${h}_follower_heartbeat
       elif [ "$(($term+0))" -eq "$current_term" -a "$success" = "false" ] ; then
          #consistency check failed: decrement next_index for host h
          echo $(($next_index-1)) > temp/${h}_next_index
-         echo 1                  > temp/${h}_follower_timeout
+         echo 1                  > temp/${h}_follower_heartbeat
       elif [ "$(($term+0))" -gt "$current_term" ] ; then
          #found a higher term: step down
          cp conf/election_timeout temp/election_timeout
@@ -93,7 +104,7 @@ for h in $cluster_nodes_old_new; do
          echo false         > temp/quorum_heartbeat
          echo $(date) switching to follower.
       else
-         echo 0 > temp/${h}_follower_timeout
+         echo 0 > temp/${h}_follower_heartbeat
       fi
    } &
 done
@@ -114,8 +125,8 @@ for configuration in "$cluster_nodes" "$cluster_nodes_new" ; do
             match_index=$last_log_index
          else
             read match_index < temp/${h}_match_index
-            read follower_timeout < temp/${h}_follower_timeout
-            q=$(($q+$follower_timeout))
+            read follower_heartbeat < temp/${h}_follower_heartbeat
+            q=$(($q+$follower_heartbeat))
          fi 
          indexes="$match_index\n$indexes"
          i=$(($i+1))

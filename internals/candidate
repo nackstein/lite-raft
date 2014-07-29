@@ -91,7 +91,7 @@ if [ "$voted_for" = "$hostname" ] ; then
          [ "$h" = "$hostname" ] && continue
          echo $(($last_log_index+1)) > temp/${h}_next_index
          echo 0                      > temp/${h}_match_index
-         echo 1                      > temp/${h}_follower_timeout
+         echo 1                      > temp/${h}_follower_heartbeat
       done
       echo leader    > temp/server_role
       echo $hostname > temp/current_leader

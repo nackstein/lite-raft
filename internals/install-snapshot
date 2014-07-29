@@ -24,7 +24,7 @@ if ! flock -e -w 0 temp/master_lock true ; then
       rm -rf state-machine-snapshot/cur
       rm -rf state-machine-data state-machine-log
       mkdir -p state-machine-log
-      cpio -ci
+      cpio -ci --quiet
       cp state-machine-snapshot/cur/cluster_nodes* conf/
       cp -r state-machine-snapshot/cur/state-machine-data .
       cp state-machine-snapshot/cur/last_included_index temp/last_log_applied

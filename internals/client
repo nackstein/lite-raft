@@ -73,7 +73,7 @@ if|set|unset|noop|conf_old_new|conf_new)
             [ -f temp/${h}_next_index  ] && continue
             echo $(($last_log_index+1)) > temp/${h}_next_index
             echo 0                      > temp/${h}_match_index
-            echo 1                      > temp/${h}_follower_timeout
+            echo 1                      > temp/${h}_follower_heartbeat
          done
       fi
 

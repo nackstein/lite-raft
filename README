@@ -1,5 +1,6 @@
-lite-raft is still under early development stage.
-this release is just to for preview and playing.
+lite-raft is still alpha-stage. the raft module is
+omplete but some rewrite can occure when I come up
+with more elegant code.
 
 here the steps you need to do manually for now:
 - configure conf/cluster_nodes with a space
@@ -16,14 +17,31 @@ execute it with ./lite-raft first-boot
 to stop it on a node: ./lite-raft stop
 to start (from second time and on): ./lite-raft start
 to insert a test entry ./lite-raft-client set key value
+to make a conditional set: ./lite-raft-client if key = X set Y
+to make a get: ./lite-raft-client get key
+to add a node to the cluster: ./lite-raft-client add-member node2
+to delete a node to the cluster: ./lite-raft-client del-member node2
+(cluster configuration change are performed online!)
+
+once you have a running raft cluster you can run package-controller
+
+copy the pkg-scripts/template on pkg-scripts/package1, customize it
+and then configure some parameters on the state-machine:
+./lite-raft-client set packages/prova/enabled true
+./lite-raft-client set packages/prova/owner ""
+./lite-raft-client set packages/prova/tick 0
+./lite-raft-client set packages/prova/timeout 30
+
+on each node that can run the package execute:
+./package-controller package1
+
+and watch what happen if you stop one of them :)
+
+(package-controller is still in early stage of development, is more
+a proof of concept that a finished work.)
 
 read the code and give me feedback if you like it or not :)
 
 my mail: luigi.tarenga@gmail.com
 
 enjoy!
-
-configuration change and snapshot are finally included!
-
-todo:
-test test test :)

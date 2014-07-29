@@ -1,0 +1,13 @@
+#!/bin/dash
+
+case $1 in
+ start)
+   touch /tmp/$(basename $0).started
+ ;;
+ stop)
+   rm /tmp/$(basename $0).started
+ ;;
+ status)
+   test -f /tmp/$(basename $0).started
+ ;;
+esac

@@ -9,35 +9,31 @@ cd $(dirname $0)
 read server_role      < temp/server_role
 read hostname         < temp/hostname
 read current_leader   < temp/current_leader
-read client_timeout   < conf/client_timeout
 read cluster_nodes    < conf/cluster_nodes
 
 if ! flock -e -w 0 temp/master_lock true ; then
    if [ "$server_role" = "leader" ] ; then
       case "$1" in
       if|set|unset)
-         if [ -z "$2" ] ; then
+         if [ "$1" != "if" -a -z "$2" -o "$1" = "if" -a "$5" != "set" ] ; then
             echo missing argument
             exit 1
          fi
          flock -e temp/activity_lock internals/client "$@"
       ;;
-      noop)
-         flock -e temp/activity_lock internals/client "$@"
+      noop|no-op)
+         flock -e temp/activity_lock internals/client "noop"
       ;;
       get)
          flock -s temp/activity_lock internals/client get "$2"
       ;;
       status)
-         echo "Leader:  $hostname"
+         read last_log_index < state/last_log_index
+         echo "Leader:  $hostname   log index: $last_log_index"
          for h in $cluster_nodes ; do
             [ "$h" = "$hostname" ] && continue
-            read follower_timeout < temp/${h}_follower_timeout
-            if [ "$follower_timeout" -gt 0 ] ; then
-               echo Follower: $h
-            else
-               echo Unknown: $h
-            fi
+            read match_index < temp/${h}_match_index
+            echo "Follower: $h   log index: $match_index"
          done
       ;;
       add-member|del-member)
@@ -68,9 +64,9 @@ if ! flock -e -w 0 temp/master_lock true ; then
       esac
 
    elif [ -n "$current_leader" ] ; then
-      ssh $sshopt "$current_leader" $PWD/$0 "$@"
+      ssh $sshopt "$current_leader" $PWD/$0 "'$1'" "'$2'" "'$3'" "'$4'" "'$5'" "'$6'"
    else
-      echo leader is not yet ready
+      echo leader is not available.
       exit 1
    fi
 else

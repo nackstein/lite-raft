@@ -14,7 +14,6 @@ read current_term    < state/current_term
 
 if ! flock -e -w 0 temp/master_lock true ; then
    if [ "$1" -ge "$current_term" ] ; then
-
       current_term=$1
       echo follower > temp/server_role
       echo "$1" > state/current_term

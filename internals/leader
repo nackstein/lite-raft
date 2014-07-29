@@ -12,7 +12,6 @@ read last_log_index   < state/last_log_index
 read commit_index     < temp/commit_index
 read hostname         < temp/hostname
 read cluster_nodes    < conf/cluster_nodes
-read follower_timeout < conf/follower_timeout
 
 cluster_nodes_new=""
 cluster_nodes_old_new="$cluster_nodes"
@@ -76,15 +75,15 @@ for h in $cluster_nodes_old_new; do
             #sent entry, update match_index
             echo $next_index        > temp/${h}_match_index
             echo $(($next_index+1)) > temp/${h}_next_index
-            echo $follower_timeout  > temp/${h}_follower_timeout
          else 
             #sent heartbeat
-            echo $follower_timeout  > temp/${h}_follower_timeout
+            :
          fi
+         echo 1                  > temp/${h}_follower_timeout
       elif [ "$(($term+0))" -eq "$current_term" -a "$success" = "false" ] ; then
          #consistency check failed: decrement next_index for host h
          echo $(($next_index-1)) > temp/${h}_next_index
-         echo $follower_timeout  > temp/${h}_follower_timeout
+         echo 1                  > temp/${h}_follower_timeout
       elif [ "$(($term+0))" -gt "$current_term" ] ; then
          #found a higher term: step down
          cp conf/election_timeout temp/election_timeout
@@ -94,9 +93,7 @@ for h in $cluster_nodes_old_new; do
          echo false         > temp/quorum_heartbeat
          echo $(date) switching to follower.
       else
-         read h_follower_timeout < temp/${h}_follower_timeout
-         #do not put a limit in the negative range. it can be useful :)
-         echo $(($h_follower_timeout-1)) > temp/${h}_follower_timeout
+         echo 0 > temp/${h}_follower_timeout
       fi
    } &
 done
@@ -117,8 +114,8 @@ for configuration in "$cluster_nodes" "$cluster_nodes_new" ; do
             match_index=$last_log_index
          else
             read match_index < temp/${h}_match_index
-            read h_follower_timeout < temp/${h}_follower_timeout
-            [ "$h_follower_timeout" -eq "$follower_timeout" ] && q=$(($q+1))
+            read follower_timeout < temp/${h}_follower_timeout
+            q=$(($q+$follower_timeout))
          fi 
          indexes="$match_index\n$indexes"
          i=$(($i+1))

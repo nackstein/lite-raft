@@ -5,11 +5,13 @@
 
 case $1 in
 get)
-   read commit_index     < temp/commit_index
+   #the get function try to always return something. if you need to be
+   #sure that the leader is not stale you should commit a noop before calling get
    read last_log_index   < state/last_log_index
+   read last_log_applied < temp/last_log_applied
    read quorum_heartbeat < temp/quorum_heartbeat
-   if [ "$quorum_heartbeat" = "true" -a "$commit_index" -eq "$last_log_index" ] ; then
-      #leader has still the quorum and everything is applied
+   if [ "$quorum_heartbeat" = "true" -a "$last_log_applied" -eq "$last_log_index" ] ; then
+      #leader is not stale and everything is applied
       if [ -n "$2" ] ; then
          if [ -f state-machine-data/"$2" ] ; then
             read val < state-machine-data/"$2"
@@ -22,7 +24,7 @@ get)
          echo null
       fi
    else
-      echo leader is stale. try again >&2
+      echo leader is stale. try again. >&2
       exit 1
    fi
 ;;
@@ -43,8 +45,9 @@ if|set|unset|noop|conf_old_new|conf_new)
    if [ "$server_role" = "leader" ] ; then
       if [ "$1" = "if" -a "$5" = "set" ] ; then
          #this is a conditional set, check if key has the required value
+         read last_log_applied < temp/last_log_applied
          read quorum_heartbeat < temp/quorum_heartbeat
-         if [ "$quorum_heartbeat" = "true" -a "$commit_index" -eq "$last_log_index" ] ; then
+         if [ "$quorum_heartbeat" = "true" -a "$last_log_applied" -eq "$last_log_index" ] ; then
             if [ -f state-machine-data/"$2" ] ; then
                read val < state-machine-data/"$2"
                if [ "$val" "$3" "$4" ] ; then
@@ -55,11 +58,11 @@ if|set|unset|noop|conf_old_new|conf_new)
                   exit 5
                fi
             else
-               echo key "$2" does not exit. >&2
+               echo key "$2" does not exist. >&2
                exit 1
             fi
          else
-            echo leader is stale. try again >&2
+            echo leader is stale. try again. >&2
             exit 1
          fi
       fi
@@ -85,18 +88,19 @@ if|set|unset|noop|conf_old_new|conf_new)
          read commit_index < temp/commit_index
 
          if [ "$commit_index" -ge "$entry_index" -a -f state-machine-log/$entry_index/$term ] ; then
-            echo client succeded >&2
+            #echo client succeded >&2
+            :
          else
-            echo timeout waiting for commit >&2
+            echo timeout waiting for commit. >&2
             exit 2
          fi
 
       else
-         echo append-entry failed >&2
+         echo append-entry failed. >&2
          exit 3
       fi
    else
-      echo not leader >&2
+      echo $hostname not leader. >&2
       exit 4
    fi
 ;;

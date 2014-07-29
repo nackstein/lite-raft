@@ -1,13 +1,18 @@
 #!/bin/dash
 
+#Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
+#Distributed under the terms of a MIT license.
+
 #
 # this script should run on every node that can run a package.
 # for each package an instance of package_controller is started on
 # selected nodes. when this script detect that the tick of one
-# package is not incrementing a race starts after $package_timeout
+# package is not incrementing a race starts after $package_timeout+$pace*3
 # seconds and the winner of the race set his own hostname as package
 # owner. the package owner is responsible for starting the package
 # and monitor it.
+# the active node stop the package if not able to get/set values 
+# on lite-raft after $package_timeout seconds.
 #
 
 PATH=$(dirname $0):$PATH
@@ -15,48 +20,61 @@ PATH=$(dirname $0):$PATH
 package=$1
 role="stand-by"
 
-echo "trying to get package timeout "
+echo -n "reading package timeout "
 while ! package_timeout=$(lite-raft-client get packages/$package/timeout) ; do
    echo -n .
    sleep 1
 done
-echo " done."
-timeout=$package_timeout
+echo "$package_timeout. done."
+
 pace=4
+timeout=$(($package_timeout+$pace*3))
 last_tick=0
 last_owner=""
 
+
+trap 'role="failed"' HUP INT TERM
+
 while true ; do
-
    sleep $pace
-
    case $role in
-
-   stand-by)
+    stand-by)
+      #if cannot read tick loop again
       tick=$(lite-raft-client get packages/$package/tick) || continue
       if [ $(($tick+0)) -gt $last_tick ] ; then
          #tick incremented so there is an active package-controller
-         timeout=$package_timeout
+         #pace*3 is a safety misure to let active node to shutdown package
+         timeout=$(($package_timeout+$pace*3))
       else
-         timeout=$(($package_timeout-$pace))
+         timeout=$(($timeout-$pace))
       fi
       last_tick=$tick
 
+      #if cannot read owner loop again
       owner=$(lite-raft-client get packages/$package/owner) || continue
+
+      if [ "$owner" = "$HOSTNAME" ] ; then
+         lite-raft-client if packages/$package/owner = "$HOSTNAME" set ""
+         timeout=$(($package_timeout+$pace*3))
+      fi
+
       if [ "$owner" != "$last_owner" ] ; then
-         timeout=$package_timeout
+         timeout=$(($package_timeout+$pace*3))
          last_owner="$owner"
       fi
 
       if [ $timeout -le 0 ] ; then
-         if lite-raft-client if packages/$package/owner = $last_owner set $hostname ; then
+         echo timeout.... last_owner $last_owner
+         if lite-raft-client if packages/$package/owner = "$last_owner" set "$HOSTNAME" ; then
+            echo becoming active
             role="active"
-            timeout=$package_timeout
+            timeout=$(($package_timeout+$pace*3))
          fi
       fi
 
-   ;;
-   active)
+    ;;
+
+    active)
       if tick=$(lite-raft-client get packages/$package/tick) ; then
          timeout=$package_timeout
          tick=$(($tick+1))
@@ -67,23 +85,39 @@ while true ; do
 
       if [ $timeout -le 0 ] ; then
          role=failed
-
       fi
 
-      package_enabled=$(lite-raft-client get packages/$package/enabled)
+      package_enabled=$(lite-raft-client get packages/$package/enabled) || continue
       if [ "$package_enabled" = "true" ] ; then
-      #   run package
-         :
+         #run package
+         if ! pkg-scripts/$1 status ; then
+            echo start package
+            pkg-scripts/$1 start
+            echo started.........
+         else
+            echo $1 online.
+         fi
       else
-      #   stop package
-         :
+         #stop package
+         if pkg-scripts/$1 status ; then
+            echo stop package
+            pkg-scripts/$1 stop
+         else
+            echo $1 offline.
+         fi
       fi
       
-   ;;
-   failed)
-      #stop package
-   ;;
+    ;;
 
+    failed)
+         #stop package
+         if pkg-scripts/$1 status ; then
+            echo stop package
+            pkg-scripts/$1 stop
+         else
+            echo $1 offline.
+            exit 1
+         fi
+    ;;
    esac
-
 done

@@ -54,7 +54,7 @@ if [ "$voted_for" = "$hostname" ] ; then
    for h in $cluster_nodes_old_new ; do
       [ "$h" = "$hostname" ] && continue
       votes=$(($votes+1))
-      ssh $sshopt $h cd "'"$PWD"'" \; flock -e -w 0.2 temp/activity_lock \
+      ssh $sshopt $h cd "'"$PWD"'" \; flock -e -w 0.4 temp/activity_lock \
          internals/request-vote $current_term $hostname $last_log_index \
          $last_log_term > temp/${h}_vote < /dev/null &
    done

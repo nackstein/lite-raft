@@ -20,21 +20,34 @@ PATH=$(dirname $0):$PATH
 package=$1
 role="stand-by"
 
-echo -n "reading package timeout "
+configured=false
+echo -n "$(date) checking configuration"
+while ! $configured ; do
+   echo -n .
+   sleep 1
+   lite-raft-client get packages/$package/tick >/dev/null 2>&1 || lite-raft-client set packages/$package/tick 0 || continue
+   lite-raft-client get packages/$package/owner >/dev/null 2>&1 || lite-raft-client set packages/$package/owner "" || continue
+   lite-raft-client get packages/$package/timeout >/dev/null 2>&1 || lite-raft-client set packages/$package/timeout 30 || continue
+   lite-raft-client get packages/$package/enabled >/dev/null 2>&1 || lite-raft-client set packages/$package/enabled "true" || continue
+   configured=true
+done
+echo " done."
+
+echo -n "$(date) reading package timeout"
 while ! package_timeout=$(lite-raft-client get packages/$package/timeout) ; do
    echo -n .
    sleep 1
 done
-echo "$package_timeout. done."
+echo " done."
 
 pace=4
 timeout=$(($package_timeout+$pace*3))
 last_tick=0
 last_owner=""
 
-
 trap 'role="failed"' HUP INT TERM
 
+echo "$(date) starting as stand-by node."
 while true ; do
    sleep $pace
    case $role in
@@ -52,7 +65,6 @@ while true ; do
 
       #if cannot read owner loop again
       owner=$(lite-raft-client get packages/$package/owner) || continue
-
       if [ "$owner" = "$HOSTNAME" ] ; then
          lite-raft-client if packages/$package/owner = "$HOSTNAME" set ""
          timeout=$(($package_timeout+$pace*3))
@@ -63,10 +75,11 @@ while true ; do
          last_owner="$owner"
       fi
 
-      if [ $timeout -le 0 ] ; then
-         echo timeout.... last_owner $last_owner
+      package_enabled=$(lite-raft-client get packages/$package/enabled) || continue
+      if [ "$package_enabled" = "true" -a $timeout -le 0 ] ; then
+         echo "$(date) timeout. last_owner ${last_owner:-\"\"}"
          if lite-raft-client if packages/$package/owner = "$last_owner" set "$HOSTNAME" ; then
-            echo becoming active
+            echo "$(date) turning to active node."
             role="active"
             timeout=$(($package_timeout+$pace*3))
          fi
@@ -87,37 +100,41 @@ while true ; do
          role=failed
       fi
 
+      owner=$(lite-raft-client get packages/$package/owner) || continue
       package_enabled=$(lite-raft-client get packages/$package/enabled) || continue
-      if [ "$package_enabled" = "true" ] ; then
+
+      if [ "$package_enabled" = "true" -a "$owner" = "$HOSTNAME" ] ; then
          #run package
          if ! pkg-scripts/$1 status ; then
-            echo start package
+            echo -n "$(date) starting package. "
             pkg-scripts/$1 start
-            echo started.........
+            echo "done."
          else
-            echo $1 online.
+            :
          fi
       else
          #stop package
          if pkg-scripts/$1 status ; then
-            echo stop package
+            echo -n "$(date) stopping package. "
             pkg-scripts/$1 stop
+            echo "done."
          else
-            echo $1 offline.
+            role="stand-by"
+            :
          fi
       fi
       
     ;;
 
     failed)
-         #stop package
-         if pkg-scripts/$1 status ; then
-            echo stop package
-            pkg-scripts/$1 stop
-         else
-            echo $1 offline.
-            exit 1
-         fi
+      #stop package
+      if pkg-scripts/$1 status ; then
+         echo -n "$(date) stopping package. "
+         pkg-scripts/$1 stop
+         echo "done."
+      else
+         exit 1
+      fi
     ;;
    esac
 done

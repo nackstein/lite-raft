@@ -26,6 +26,7 @@ mkdir -p /dev/shm/lite-raft/temp
    hostname -s > temp/hostname
    read hostname < temp/hostname
    read cluster_nodes < conf/cluster_nodes
+   read snapshot_period < conf/snapshot_period
 
    echo $(date) starting as follower.
    while true ; do
@@ -50,7 +51,7 @@ mkdir -p /dev/shm/lite-raft/temp
          read first_log_index < state-machine-snapshot/cur/last_included_index
       fi
       read last_log_index < state/last_log_index
-      if [ $(($last_log_index-$first_log_index)) -gt 20 ] ; then
+      if [ $(($last_log_index-$first_log_index)) -gt $snapshot_period ] ; then
          flock -e -w 1 temp/activity_lock internals/create-snapshot
       fi
 

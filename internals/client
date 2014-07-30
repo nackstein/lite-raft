@@ -51,15 +51,19 @@ if|set|unset|noop|conf_old_new|conf_new)
             if [ -f state-machine-data/"$2" ] ; then
                read val < state-machine-data/"$2"
                if [ "$val" "$3" "$4" ] ; then
+                  if [ "$val" = "$6" ] ; then
+                     echo value of "$2" already set to "$6" >&2
+                     exit 5
+                  fi
                   #change positional paramter to perform a normal "set" in append-entry below
                   set -- "set" "$2" "$6"
                else
                   echo value of "$2" does not match "$4" >&2
-                  exit 5
+                  exit 6
                fi
             else
                echo key "$2" does not exist. >&2
-               exit 1
+               exit 7
             fi
          else
             echo leader is stale. try again. >&2

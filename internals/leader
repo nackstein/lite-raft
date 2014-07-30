@@ -43,7 +43,7 @@ for h in $cluster_nodes_old_new; do
          entry_term=${entry_term##state-machine-log/*/}
          read entry_command entry_value < $(echo state-machine-log/$next_index/$entry_term)
          
-         ssh $sshopt $h cd "'"$PWD"'" \; flock -e -w 0.2 temp/activity_lock \
+         ssh $sshopt $h cd "'"$PWD"'" \; flock -e -w 0.4 temp/activity_lock \
             internals/append-entry $current_term $hostname $prev_log_index \
             $prev_log_term "'"$entry_term"'" "'"$entry_command"'" "'"$entry_value"'" \
             $commit_index > temp/${h}_append_result < /dev/null
@@ -62,7 +62,7 @@ for h in $cluster_nodes_old_new; do
             next_index=$(($prev_log_index+1))
          fi
 
-         ssh $sshopt $h cd "'"$PWD"'" \; flock -e -w 0.2 temp/activity_lock \
+         ssh $sshopt $h cd "'"$PWD"'" \; flock -e -w 0.4 temp/activity_lock \
             internals/append-entry $current_term $hostname $prev_log_index \
             $prev_log_term "''" "''" "''" $commit_index > temp/${h}_append_result < /dev/null
 
@@ -74,7 +74,7 @@ for h in $cluster_nodes_old_new; do
          read prev_log_term  < state-machine-snapshot/cur/last_included_term
 
          find state-machine-snapshot/cur | cpio -co --quiet | ssh $sshopt $h cd "'"$PWD"'" \; \
-            flock -e -w 0.2 temp/activity_lock internals/install-snapshot \
+            flock -e -w 0.4 temp/activity_lock internals/install-snapshot \
             $current_term $hostname > temp/${h}_append_result
 
          read term < temp/${h}_append_result

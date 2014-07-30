@@ -46,14 +46,14 @@ if ! flock -e -w 0 temp/master_lock true ; then
          if [ "$1" = "del-member" ] ; then
             cluster_nodes_new=$(for h in $cluster_nodes; do [ "$h" != "$2" ] && echo -n "$h "; done)
          fi
-         [ "$1" = "add-member" ] && ssh $sshopt $2 $PWD/lite-raft first-boot
+         [ "$1" = "add-member" ] && ssh $sshopt $2 cd "'"$PWD"'" \; ./lite-raft first-boot
          echo inserting conf_old_new.
          if flock -e temp/activity_lock internals/client conf_old_new "$cluster_nodes_new" ; then
             echo conf_old_new committed.
             echo inserting conf_new.
             if flock -e temp/activity_lock internals/client conf_new ; then
                echo conf_new committed.
-               [ "$1" = "del-member" ] && ssh $sshopt $2 $PWD/lite-raft stop
+               [ "$1" = "del-member" ] && ssh $sshopt $2 cd "'"$PWD"'" \; ./lite-raft stop
             else
                echo returned error $?
             fi
@@ -64,7 +64,7 @@ if ! flock -e -w 0 temp/master_lock true ; then
       esac
 
    elif [ -n "$current_leader" ] ; then
-      ssh $sshopt "$current_leader" $PWD/$0 "'$1'" "'$2'" "'$3'" "'$4'" "'$5'" "'$6'"
+      ssh $sshopt "$current_leader" cd "'"$PWD"'" \; ./lite-raft-client "'$1'" "'$2'" "'$3'" "'$4'" "'$5'" "'$6'"
    else
       echo leader is not available.
       exit 1

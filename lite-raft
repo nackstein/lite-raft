@@ -32,10 +32,12 @@ start)
          exit 1
       fi
    fi
+   echo start
    ./lite-raft-server > message-log/lite-raft-server.log &
 ;;
 stop)
    echo stop
    pkill -f "/bin/dash ./lite-raft-server"
+   fuser -s -k -TERM ~/.ssh/lite-raft-socket-*
 ;;
 esac

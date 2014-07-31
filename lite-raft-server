@@ -3,10 +3,23 @@
 #Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
 #Distributed under the terms of a MIT license.
 
-export sshopt="-q -o ConnectTimeout=1 -o StrictHostKeyChecking=no"
+export sshopt="-q -o ConnectTimeout=1 -o ServerAliveInterval=2 \
+-o ServerAliveCountMax=3 -o StrictHostKeyChecking=no \
+-o ControlMaster=auto -o ControlPath=~/.ssh/lite-raft-socket-%h"
 
 cd $(dirname $0)
 mkdir -p /dev/shm/lite-raft/temp
+
+hostname=$(hostname -s)
+while true ; do
+   read cluster_nodes < conf/cluster_nodes
+   for h in $cluster_nodes ; do
+      if [ "$h" != "$hostname" ] ; then
+         [ -S ~/.ssh/lite-raft-socket-$h ] || ssh -MNf $sshopt $h
+      fi
+   done
+   sleep 4
+done &
 
 {
    flock -e 9
@@ -55,7 +68,7 @@ mkdir -p /dev/shm/lite-raft/temp
          flock -e -w 1 temp/activity_lock internals/create-snapshot
       fi
 
-      wait
+      wait %2
    done
    
 } 9> temp/master_lock

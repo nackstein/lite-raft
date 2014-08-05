@@ -1,0 +1,36 @@
+#!/bin/dash
+
+cd $(dirname $0)
+
+case $1 in
+ start)
+   if [ -z "$2" ] ; then
+      echo you need to specify a package name.
+      exit 1
+   fi 
+   # use flock to avoid multiple pkg-mon per package
+   if [ -f temp/monitor_lock_"$2" ] ; then
+      if ! flock -e -w 0 temp/monitor_lock_"$2" true ; then
+         echo temp/master_lock is locked. cannot initialize state-machine.
+         exit 1
+      fi
+   fi 
+   ./pkg-mon $2 > message-log/pkg-mon.$2.log &
+ ;;
+ stop)
+   echo -n "sending TERM signal and waiting for package to halt"
+   pkill -f "/bin/dash ./pkg-mon $2"
+   while pkill -SIGUSR1 -f "/bin/dash ./pkg-mon $2" ; do
+      echo -n .
+      sleep 1
+   done
+   echo " done."
+ ;;
+ init)
+   timeout=$(control-scripts/$2 echo timeout)
+   preferred_owner=$(control-scripts/$2 echo preferred_owner)
+   ./lite-raft-remote set packages/$2/timeout ${timeout:-60}
+   ./lite-raft-remote set packages/$2/owner "$preferred_owner"
+   ./lite-raft-remote set packages/$2/tick 0
+ ;;
+esac

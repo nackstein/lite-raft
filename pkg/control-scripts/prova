@@ -1,0 +1,27 @@
+#!/bin/dash
+
+timeout=77
+
+case $1 in
+ start)
+   touch /tmp/$(basename $0).started
+ ;;
+ stop)
+   rm /tmp/$(basename $0).started
+ ;;
+ status)
+   # can return 3 values: 0 up, 1 down, 2 degraded
+   if [ -f /tmp/$(basename $0).started ] ; then
+      exit 0
+   else
+      exit 1
+   fi
+   #in this case degraded does not exist
+ ;;
+ fence)
+   echo fence ok
+ ;;
+ echo)
+   eval echo \$$2
+ ;;
+esac

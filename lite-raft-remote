@@ -1,0 +1,46 @@
+#!/bin/dash
+
+#Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
+#Distributed under the terms of a MIT license.
+
+# you can copy and use this script on a node that is not a
+# member of the consensus quorum but still need to operate
+# on the state-machine thus performing set or get operations.
+
+export sshopt="-o ConnectTimeout=1 -o ServerAliveInterval=2 \
+-o ServerAliveCountMax=3 -o StrictHostKeyChecking=no \
+-o ControlMaster=auto -o ControlPath=~/.ssh/lite-raft-socket-%h"
+
+# change the following parameters to fit your configuration
+
+cluster_nodes="host1 host2 host3"
+lite_raft_path="/root/lite-raft"
+user=root
+
+################################################################
+
+randlist () {
+   n=$(od -An -N1 -d /dev/urandom)
+   n=$(($n%$#+1))
+
+   i=$n
+   while [ $i -lt $(($#+1)) ] ; do
+      eval echo -n "\$$i\ "
+      i=$(($i+1))
+   done
+
+   i=1
+   while [ $i -lt $n ] ; do
+      eval echo -n "\$$i\ "
+      i=$(($i+1))
+   done
+}
+
+for h in $(randlist $cluster_nodes) ; do
+   [ -S ~/.ssh/lite-raft-socket-$h ] || \
+   ssh -MNf $sshopt $user@$h && \
+   {
+      ssh $sshopt $user@$h cd "'"$lite_raft_path"'" \; ./lite-raft-client "'$1'" "'$2'" "'$3'" "'$4'" "'$5'" "'$6'" ;
+      exit $?
+   }
+done

@@ -7,12 +7,12 @@
 # this script should run on every node that can run a package.
 # for each package an instance of package_controller is started on
 # selected nodes. when this script detect that the tick of one
-# package is not incrementing a race starts after $package_timeout+$pace*3
+# package is not incrementing a race starts after $timeout+$pace*3
 # seconds and the winner of the race set his own hostname as package
 # owner. the package owner is responsible for starting the package
 # and monitor it.
 # the active node stop the package if not able to get/set values 
-# on lite-raft after $package_timeout seconds.
+# on lite-raft after $timeout seconds.
 #
 
 PATH=$(dirname $0):$PATH
@@ -22,37 +22,34 @@ package=$1
 role="stand-by"
 
 if [ -z "$package" ] ; then
-   echo missing argument >&2
+   echo error. missing argument.
    exit 1
 fi
 
+if [ -f temp/monitor_lock_$1 ] ; then
+   if ! flock -e -w 0 temp/monitor_lock_$1 true ; then
+      echo temp/monitor_lock_$1 is locked. cannot start pkg-mon.
+      exit 1
+   fi
+fi
+
 pace=4
-echo -n "$(date) reading package timeout"
-while ! package_timeout=$(lite-raft-remote get packages/$package/timeout) ; do
-   echo -n .
-   sleep $pace
+for key in timeout tick owner ; do
+   echo -n "$(date) reading package $key"
+   while ! val=$(lite-raft-remote get packages/$package/$key) ; do
+      echo -n .
+      sleep $pace
+   done
+   #create a new variable with the name of $key and value of $val
+   eval $key=\"$val\"
+   echo " done."
 done
-echo " done."
-timeout=$(($package_timeout+$pace*3))
 
-echo -n "$(date) reading tick"
-while ! tick=$(lite-raft-remote get packages/$package/tick) ; do
-   echo -n .
-   sleep $pace
-done
-echo " done."
-
-echo -n "$(date) reading owner"
-while ! owner=$(lite-raft-remote get packages/$package/owner) ; do
-   echo -n .
-   sleep $pace
-done
-echo " done."
-
+counter=$(($timeout+$pace*3))
 if [ "$owner" = "$HOSTNAME" ] ; then
    if lite-raft-remote if packages/$package/owner = "$HOSTNAME" set "" ; then
       echo "$(date) resetting owner and cheating to win the race!"
-      timeout=$(($pace*3))
+      counter=$(($pace*3))
       owner=""
    fi
 fi
@@ -68,12 +65,17 @@ trap 'echo "$(date) received signal SIGINT. starting halt sequence." ; stop="tru
 trap 'echo "$(date) received signal SIGTERM. starting halt sequence." ; stop="true"' TERM
 trap '' USR1
 
+
 {
    flock -e 9
 
-   echo "$(date) starting as stand-by node."
+   #let this echo in backgroud to start the loop! 
+   #the loop execute the sleep and some work in parallel, then wait for the sleep at
+   #next round. until the work is faster that sleep $pace each round last exactly $pace
+   #seconds instead of sleep $pace + work time.
+   echo "$(date) starting as stand-by node." & sleep_pid=$!
    while true ; do
-      sleep $pace
+      wait $sleep_pid ; sleep $pace & sleep_pid=$!
       case $role in
        stand-by)
          [ "$stop" = "true" ] && exit
@@ -82,100 +84,156 @@ trap '' USR1
          if [ $tick -gt $last_tick ] ; then
             #tick incremented, there must be an active package-controler
             #pace*3 is a safety misure to let active node to shutdown package
-            timeout=$(($package_timeout+$pace*3))
+            counter=$(($timeout+$pace*3))
             last_tick=$tick
             continue
          else
-            timeout=$(($timeout-$pace))
+            counter=$(($counter-$pace))
          fi
          last_tick=$tick
 
          #if cannot read owner loop again
          owner=$(lite-raft-remote get packages/$package/owner) || continue
          if [ "$owner" != "$last_owner" ] ; then
-            timeout=$(($package_timeout+$pace*3))
+            counter=$(($timeout+$pace*3))
             last_owner="$owner"
             continue
          fi
 
-         if [ $timeout -le 0 ] ; then
+         if [ $counter -le 0 ] ; then
             echo "$(date) timeout. last_owner ${last_owner:-\"\"}"
-            if lite-raft-remote if packages/$package/owner = "$last_owner" set "$HOSTNAME" ; then
-               echo "$(date) turning to active node."
-               echo "$(date) package state starts as  $pkg_state."
-               role="active"
-               timeout=$package_timeout
+            if lite-raft-remote if packages/$package/tick = $tick set $(($tick+1)) ; then
+               tick=$(($tick+1))
+               if lite-raft-remote if packages/$package/owner = "$last_owner" set "$HOSTNAME" ; then
+                  echo "$(date) turning to active node."
+                  echo "$(date) package state starts as  $pkg_state."
+                  lite-raft-remote set packages/$package/state $pkg_state
+                  role="active"
+                  counter=$timeout
+               fi
             fi
          fi
-
        ;;
 
        active)
          if lite-raft-remote set packages/$package/tick $(($tick+1)) ; then
-            timeout=$package_timeout
+            counter=$timeout
             tick=$(($tick+1))
          else
-            timeout=$(($timeout-$pace))
+            counter=$(($counter-$pace))
          fi
 
-         [ $timeout -le 0 ] && stop="true"
+         [ $counter -le 0 ] && stop="true"
 
          if owner=$(lite-raft-remote get packages/$package/owner) ; then
-            [ "$owner" != "$HOSTNAME" ] && stop="true"
+            if [ "$owner" != "$HOSTNAME" ] ; then
+               #this case should never happens. if it happens than 
+               #there is a serious bug in pkg-mon implementation!
+               #make the other owner fail too!
+               lite-raft-remote set packages/$package/owner ""
+               echo "$(date) BUG: found $owner as second active node!"
+               stop="true"
+            fi
          fi
 
-         #status function returns: 0 up, 1 down, 2 degraded
-         control-scripts/$package status >> message-log/$package.status.log 
-         pkg_status=$?
-
+         old_state=$pkg_state
          #handle all cases of the package state machine
          case $pkg_state in
           starting)
-            if [ $pkg_status -eq 0 ] ; then
-               pkg_state="running"
-               echo "$(date) package state changes to $pkg_state."
-            elif [ $pkg_status -eq 1 ] ; then
+            if ! pkill -0 -f "/bin/dash control-scripts/$package start" ; then
+               wait $start_pid
+               if [ $? -eq 0 ] ; then
+                  pkg_state="running"
+               else
+                  pkg_state="failing"
+               fi
+            else
+               start_timeout=$(($start_timeout-$pace))
+            fi
+
+            if [ $start_timeout -le 0 ] ; then
+               echo "$(date) timeout waiting for package to start."
+               pkill -f "/bin/dash control-scripts/$package start"
                control-scripts/$package stop >> message-log/$package.stop.log &
+               stop_pid=$!
                pkg_state="failing"
-               echo "$(date) package state changes to $pkg_state."
             fi
           ;;
+
           running)
+            #status function returns: 0 up, 1 down, 2 degraded
+            control-scripts/$package status >> message-log/$package.status.log 
+            pkg_status=$?
             if [ "$stop" = "true" -o $pkg_status -ne 0 ] ; then
                control-scripts/$package stop >> message-log/$package.stop.log &
                [ "$stop" = "true" ] && pkg_state="halting"
                [ $pkg_status -ne 0 ] && pkg_state="failing"
-               echo "$(date) package state changes to $pkg_state."
             fi
           ;;
+
           halting|failing)
-            if [ $pkg_status -eq 1 ] ; then
-               [ "$pkg_state" = "halting" ] && pkg_state="halted"
-               [ "$pkg_state" = "failing" ] && pkg_state="failed"
-               echo "$(date) package state changes to $pkg_state."
+            if ! pkill -0 -f "/bin/dash control-scripts/$package stop" ; then
+               wait $stop_pid
+               if [ $? -eq 0 ] ; then
+                  [ "$pkg_state" = "halting" ] && pkg_state="halted"
+                  [ "$pkg_state" = "failing" ] && pkg_state="failed"
+               else
+                  pkg_state="failed"
+               fi
+            else
+               stop_timeout=$(($stop_timeout-$pace))
+            fi
+
+            if [ $stop_timeout -le 0 ] ; then
+               echo "$(date) timeout waiting for package to stop."
+               #pkill -f "/bin/dash control-scripts/$package stop"
+               pkg_state="failed"
             fi
           ;;
+
           halted|failed)
                echo "$(date) package $pkg_state. exit."
                [ "$pkg_state" = "halted" ] && ret=0
                [ "$pkg_state" = "failed" ] && ret=1
                exit $ret
           ;;
+
           unknown)
+            if pkill -0 -f "/bin/dash control-scripts/$package stop" ; then
+               echo "$(date) start script already running. package state is unknown."
+               exit 1
+            fi
+
+            if pkill -0 -f "/bin/dash control-scripts/$package stop" ; then
+               echo "$(date) stop script already running. package state is unknown."
+               exit 1
+            fi
+
+            start_timeout=$(control-scripts/$package echo start_timeout)
+            start_timeout=${start_timeout:-60}
+            stop_timeout=$(control-scripts/$package echo stop_timeout)
+            stop_timeout=${stop_timeout:-60}
+
+            control-scripts/$package status >> message-log/$package.status.log 
+            pkg_status=$?
             if [ "$stop" = "false" -a $pkg_status -eq 1 ] ; then
-               control-scripts/$package start > message-log/$package.start.log &
+               control-scripts/$package start >> message-log/$package.start.log &
+               start_pid=$!
                pkg_state="starting"
-               echo "$(date) package state changes to $pkg_state."
             else
-               control-scripts/$package stop &
+               control-scripts/$package stop >> message-log/$package.stop.log &
+               stop_pid=$!
                pkg_state="failing"
-               echo "$(date) package state changes to $pkg_state."
-               exit
             fi 
           ;;
-         esac
-       ;;
-      esac
-   done
+         esac # package_state
 
+         if [ "$old_state" != "$pkg_state" ] ; then
+            echo "$(date) package state changes to $pkg_state."
+            lite-raft-remote set packages/$package/state $pkg_state
+         fi
+       ;;
+      esac # role
+   done
+   echo ops
 } 9> temp/monitor_lock_$1

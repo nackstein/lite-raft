@@ -38,7 +38,7 @@ randlist () {
 
 for h in $(randlist $cluster_nodes) ; do
    [ -S ~/.ssh/lite-raft-socket-$h ] || \
-   ssh -MNf $sshopt $user@$h && \
+   ssh -MNf $sshopt $user@$h >/dev/null && \
    {
       ssh $sshopt $user@$h cd "'"$lite_raft_path"'" \; ./lite-raft-client "'$1'" "'$2'" "'$3'" "'$4'" "'$5'" "'$6'" ;
       exit $?

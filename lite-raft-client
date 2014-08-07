@@ -30,6 +30,9 @@ if ! flock -e -w 0 temp/master_lock true ; then
       get)
          flock -s temp/activity_lock internals/client get "$2"
       ;;
+      list)
+         flock -s temp/activity_lock internals/client list "$2"
+      ;;
       status)
          read last_log_index < state/last_log_index
          echo "Leader:  $hostname   log index: $last_log_index"

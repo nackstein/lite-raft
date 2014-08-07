@@ -4,7 +4,7 @@
 #Distributed under the terms of a MIT license.
 
 case $1 in
-get)
+get|list)
    #the get function try to always return something. if you need to be
    #sure that the leader is not stale you should commit a noop before calling get
    read last_log_index   < state/last_log_index
@@ -13,12 +13,21 @@ get)
    if [ "$quorum_heartbeat" = "true" -a "$last_log_applied" -eq "$last_log_index" ] ; then
       #leader is not stale and everything is applied
       if [ -n "$2" ] ; then
-         if [ -f state-machine-data/"$2" ] ; then
-            read val < state-machine-data/"$2"
-            echo $val
+         if [ "$1" = "get" ] ; then
+            if [ -f state-machine-data/"$2" ] ; then
+               read val < state-machine-data/"$2"
+               echo $val
+            else
+               echo key "$2" does not exit. >&2
+               exit 1
+            fi
          else
-            echo key "$2" does not exit. >&2
-            exit 1
+            if [ -d state-machine-data/"$2" ] ; then
+               ls -1 state-machine-data/"$2"
+            else
+               echo directory "$2" does not exit. >&2
+               exit 1
+            fi
          fi
       else
          echo null

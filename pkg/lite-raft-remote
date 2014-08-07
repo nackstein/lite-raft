@@ -13,7 +13,7 @@ export sshopt="-o ConnectTimeout=1 -o ServerAliveInterval=2 \
 
 # change the following parameters to fit your configuration
 
-cluster_nodes="snsv01773 snsv01774 snsv01775"
+cluster_nodes="host1 host2 host3"
 lite_raft_path="/root/lite-raft"
 user=root
 
@@ -38,7 +38,7 @@ randlist () {
 
 for h in $(randlist $cluster_nodes) ; do
    [ -S ~/.ssh/lite-raft-socket-$h ] || \
-   ssh -MNf $sshopt $user@$h && \
+   ssh -MNf $sshopt $user@$h >/dev/null && \
    {
       ssh $sshopt $user@$h cd "'"$lite_raft_path"'" \; ./lite-raft-client "'$1'" "'$2'" "'$3'" "'$4'" "'$5'" "'$6'" ;
       exit $?

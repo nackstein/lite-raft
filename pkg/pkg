@@ -1,5 +1,6 @@
 #!/bin/dash
 
+PATH=$(dirname $0):$PATH
 cd $(dirname $0)
 
 case $1 in
@@ -15,22 +16,33 @@ case $1 in
          exit 1
       fi
    fi 
-   ./pkg-mon $2 > message-log/pkg-mon.$2.log &
+   pkg-mon $2 > message-log/pkg-mon.$2.log &
  ;;
+
  stop)
    echo -n "sending TERM signal and waiting for package to halt"
-   pkill -f "/bin/dash ./pkg-mon $2"
-   while pkill -SIGUSR1 -f "/bin/dash ./pkg-mon $2" ; do
+   pkill -f "/bin/dash pkg-mon $2"
+   while pkill -SIGUSR1 -f "/bin/dash pkg-mon $2" ; do
       echo -n .
       sleep 1
    done
+   fuser -s -k -TERM ~/.ssh/lite-raft-socket-*
    echo " done."
  ;;
+
  init)
    timeout=$(control-scripts/$2 echo timeout)
    preferred_owner=$(control-scripts/$2 echo preferred_owner)
-   ./lite-raft-remote set packages/$2/timeout ${timeout:-60}
-   ./lite-raft-remote set packages/$2/owner "$preferred_owner"
-   ./lite-raft-remote set packages/$2/tick 0
+   lite-raft-remote set packages/$2/timeout ${timeout:-60}
+   lite-raft-remote set packages/$2/owner "$preferred_owner"
+   lite-raft-remote set packages/$2/state unknown
+   lite-raft-remote set packages/$2/tick 0
+ ;;
+
+ status)
+   echo -n "package owner: " ; lite-raft-remote get packages/$2/owner
+   echo -n "package state: " ; lite-raft-remote get packages/$2/state
+   echo -n "package tick:  " ; lite-raft-remote get packages/$2/tick
+
  ;;
 esac

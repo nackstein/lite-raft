@@ -1,14 +1,23 @@
 #!/bin/dash
 
 timeout=20
-ip=192.168.68.68; prefix=24; netdev=eth0
+ip_0=192.168.68.68; prefix_0=24; netdev_0=eth0
+ip_1=192.168.68.69; prefix_1=24; netdev_1=eth0
 start_timeout=10
 stop_timeout=10
+
+lun_0=/dev/pippo
 
 case $1 in
  start)
    # start network
-   if [ -n "$ip" ] ; then
+
+   i=0
+   eval ip=\$ip_$i
+   while [ -n "$ip" ] ; do
+      eval prefix=\$prefix_$i
+      eval netdev=\$netdev_$i
+
       if arping -q -c 2 -w 3 -D -I $netdev $ip ; then
          ip addr add $ip/$prefix dev $netdev
          arping -q -U -c 2 -I $netdev $ip
@@ -17,11 +26,40 @@ case $1 in
          echo "$(date) ip address $ip is in use."
          exit 1
       fi
-   fi
+
+      i=$(($i+1))
+      eval ip=\$ip_$i
+   done
 
    # start storage
    touch /tmp/$(basename $0).started
    
+   i=0
+   eval lun=\$lun_$i
+
+   #key=$(gethostip -x $HOSTNAME)
+   #try to avoid requiring gethostip to get ip addr in hex
+   key=$(host $HOSTNAME | head -1 | tr . " ")
+   key=${key#$HOSTNAME has address }
+   key=$(eval printf %02x%02x%02x%02x $key)
+
+   while [ -n "$lun" ] ; do
+      #reserve
+      #echo sg_persist --no-inquiry --out --register --param-aptpl --param-sark=$key --device=$lun >&2
+      #echo sg_persist --no-inquiry --out --reserve --prout-type=5 --param-rk=$key --device=$lun >&2
+
+      #release
+      #echo sg_persist --no-inquiry --out --release --prout-type=5 --param-rk=$key --device=$lun >&2
+      #echo sg_persist --no-inquiry --out --register --param-aptpl --param-rk=$key --param-sark=0 --device=$lun >&2
+
+      #check
+      #sg_persist --no-inquiry --read-reservation --device=$lun | grep -q "^[[:space:]]*Key=0x$key"
+      #sg_persist --no-inquiry --read-keys --device=$lun | grep -q "^[[:space:]]*0x$key"
+      
+      i=$(($i+1))
+      eval lun=\$lun_$i
+   done
+
    # start programs
 
    exit 0
@@ -35,14 +73,26 @@ case $1 in
    # stop storage
 
    # stop network
-   if [ -n "$ip" ] ; then
-      ip addr del $ip/$prefix dev $netdev
-   fi
+   i=0
+   eval ip=\$ip_$i
+   while [ -n "$ip" ] ; do
+      eval prefix=\$prefix_$i
+      eval netdev=\$netdev_$i
+
+      if ip addr show dev $netdev | grep -q -F " $ip/$prefix " ; then
+         ip addr del $ip/$prefix dev $netdev
+      fi
+
+      i=$(($i+1))
+      eval ip=\$ip_$i
+   done
+
+   exit 0
  ;;
 
  status)
-   num_check=3
-   failed_check=3
+   num_check=2
+   failed_check=2
 
    # can return 3 values: 0 up, 1 down, 2 degraded
    
@@ -55,13 +105,26 @@ case $1 in
    if [ -f /tmp/$(basename $0).started ] ; then
       failed_check=$(($failed_check-1))
    fi
-   
+
    # monitor network
-   if [ -n "$ip" ] ; then
+   i=0
+   eval ip=\$ip_$i
+   while [ -n "$ip" ] ; do
+      num_check=$(($num_check+1))
+      failed_check=$(($failed_check+1))
+
+      eval prefix=\$prefix_$i
+      eval netdev=\$netdev_$i
+
       if ip addr show dev $netdev | grep -q -F " $ip/$prefix " ; then
          failed_check=$(($failed_check-1))
       fi
-   fi
+
+      i=$(($i+1))
+      eval ip=\$ip_$i
+   done
+   #num_check=$((num_check+$i-1))
+   #failed_check=$(($failed_check+$i-1))
 
    [ "$failed_check" -eq "$num_check" ] && exit 1
    [ "$failed_check" -eq "0" ] && exit 0

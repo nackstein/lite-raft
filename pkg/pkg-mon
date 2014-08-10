@@ -22,8 +22,13 @@ package=$1
 role="stand-by"
 
 if [ -z "$package" ] ; then
-   echo error. missing argument.
-   exit 1
+   echo "Usage: ${0##*/} { package-name}"
+   echo "This script should run "
+   echo "  This is the cluster package monitor. It can run on multiple node and only"
+   echo "  one switch from stand-by to active state activating the package and polling"
+   echo "  its health status. "
+   echo "  Usually it's started with the \"pkg start <packag-name>\" command."
+   exit 0
 fi
 
 if [ -f temp/monitor_lock_$1 ] ; then
@@ -48,8 +53,8 @@ done
 counter=$(($timeout+$pace*3))
 if [ "$owner" = "$HOSTNAME" ] ; then
    if lite-raft-remote if packages/$package/owner = "$HOSTNAME" set "" ; then
-      echo "$(date) resetting owner and cheating to win the race!"
-      counter=$(($pace*3))
+      #echo "$(date) resetting owner and cheating to win the race!"
+      counter=0
       owner=""
    fi
 fi
@@ -65,20 +70,20 @@ trap 'echo "$(date) received signal SIGINT. starting halt sequence." ; stop="tru
 trap 'echo "$(date) received signal SIGTERM. starting halt sequence." ; stop="true"' TERM
 trap '' USR1
 
+quit () {
+   fuser -s -k -TERM ~/.ssh/lite-raft-socket-*
+   exit $1
+}
 
 {
    flock -e 9
 
-   #let this echo in backgroud to start the loop! 
-   #the loop execute the sleep and some work in parallel, then wait for the sleep at
-   #next round. until the work is faster that sleep $pace each round last exactly $pace
-   #seconds instead of sleep $pace + work time.
    echo "$(date) starting as stand-by node." & sleep_pid=$!
    while true ; do
       wait $sleep_pid ; sleep $pace & sleep_pid=$!
       case $role in
        stand-by)
-         [ "$stop" = "true" ] && exit
+         [ "$stop" = "true" ] && quit 0
 
          tick=$(lite-raft-remote get packages/$package/tick) || continue
          if [ $tick -gt $last_tick ] ; then
@@ -87,9 +92,9 @@ trap '' USR1
             counter=$(($timeout+$pace*3))
             last_tick=$tick
             continue
-         else
-            counter=$(($counter-$pace))
          fi
+
+         counter=$(($counter-$pace))
          last_tick=$tick
 
          #if cannot read owner loop again
@@ -101,11 +106,11 @@ trap '' USR1
          fi
 
          if [ $counter -le 0 ] ; then
-            echo "$(date) timeout. last_owner ${last_owner:-\"\"}"
+            echo "$(date) tick timeout. trying to activate package."
             if lite-raft-remote if packages/$package/tick = $tick set $(($tick+1)) ; then
                tick=$(($tick+1))
                if lite-raft-remote if packages/$package/owner = "$last_owner" set "$HOSTNAME" ; then
-                  echo "$(date) turning to active node."
+                  echo "$(date) race won. turning to active node."
                   echo "$(date) package state starts as  $pkg_state."
                   lite-raft-remote set packages/$package/state $pkg_state
                   role="active"
@@ -121,9 +126,8 @@ trap '' USR1
             tick=$(($tick+1))
          else
             counter=$(($counter-$pace))
+            [ $counter -le 0 ] && stop="true"
          fi
-
-         [ $counter -le 0 ] && stop="true"
 
          if owner=$(lite-raft-remote get packages/$package/owner) ; then
             if [ "$owner" != "$HOSTNAME" ] ; then
@@ -140,7 +144,7 @@ trap '' USR1
          #handle all cases of the package state machine
          case $pkg_state in
           starting)
-            if ! pkill -0 -f "/bin/dash control-scripts/$package start" ; then
+            if ! pkill -0 -x -f "$shell_cmd control-scripts/$package start" ; then
                wait $start_pid
                if [ $? -eq 0 ] ; then
                   pkg_state="running"
@@ -153,8 +157,8 @@ trap '' USR1
 
             if [ $start_timeout -le 0 ] ; then
                echo "$(date) timeout waiting for package to start."
-               pkill -f "/bin/dash control-scripts/$package start"
-               control-scripts/$package stop >> message-log/$package.stop.log &
+               pkill -x -f "$shell_cmd control-scripts/$package start"
+               control-scripts/$package stop >> message-log/$package.log &
                stop_pid=$!
                pkg_state="failing"
             fi
@@ -162,17 +166,19 @@ trap '' USR1
 
           running)
             #status function returns: 0 up, 1 down, 2 degraded
-            control-scripts/$package status >> message-log/$package.status.log 
+            control-scripts/$package status >> message-log/$package.log 
             pkg_status=$?
-            if [ "$stop" = "true" -o $pkg_status -ne 0 ] ; then
-               control-scripts/$package stop >> message-log/$package.stop.log &
-               [ "$stop" = "true" ] && pkg_state="halting"
-               [ $pkg_status -ne 0 ] && pkg_state="failing"
+            if [ "$stop" = "true" ] ; then
+               control-scripts/$package stop >> message-log/$package.log &
+               pkg_state="halting"
+            elif [ $pkg_status -ne 0 ] ; then
+               control-scripts/$package stop >> message-log/$package.log &
+               pkg_state="failing"
             fi
           ;;
 
           halting|failing)
-            if ! pkill -0 -f "/bin/dash control-scripts/$package stop" ; then
+            if ! pkill -0 -x -f "$shell_cmd control-scripts/$package stop" ; then
                wait $stop_pid
                if [ $? -eq 0 ] ; then
                   [ "$pkg_state" = "halting" ] && pkg_state="halted"
@@ -186,7 +192,7 @@ trap '' USR1
 
             if [ $stop_timeout -le 0 ] ; then
                echo "$(date) timeout waiting for package to stop."
-               #pkill -f "/bin/dash control-scripts/$package stop"
+               #pkill -x -f "$shell_cmd control-scripts/$package stop"
                pkg_state="failed"
             fi
           ;;
@@ -195,18 +201,21 @@ trap '' USR1
                echo "$(date) package $pkg_state. exit."
                [ "$pkg_state" = "halted" ] && ret=0
                [ "$pkg_state" = "failed" ] && ret=1
-               exit $ret
+               quit $ret
           ;;
 
           unknown)
-            if pkill -0 -f "/bin/dash control-scripts/$package stop" ; then
+            shell_cmd=$(head -1 control-scripts/$package)
+            shell_cmd=${shell_cmd#\#!}
+
+            if pkill -0 -x -f "$shell_cmd control-scripts/$package stop" ; then
                echo "$(date) start script already running. package state is unknown."
-               exit 1
+               quit 1
             fi
 
-            if pkill -0 -f "/bin/dash control-scripts/$package stop" ; then
+            if pkill -0 -x -f "$shell_cmd control-scripts/$package stop" ; then
                echo "$(date) stop script already running. package state is unknown."
-               exit 1
+               quit 1
             fi
 
             start_timeout=$(control-scripts/$package echo start_timeout)
@@ -214,14 +223,14 @@ trap '' USR1
             stop_timeout=$(control-scripts/$package echo stop_timeout)
             stop_timeout=${stop_timeout:-60}
 
-            control-scripts/$package status >> message-log/$package.status.log 
+            control-scripts/$package status >> message-log/$package.log 
             pkg_status=$?
             if [ "$stop" = "false" -a $pkg_status -eq 1 ] ; then
-               control-scripts/$package start >> message-log/$package.start.log &
+               control-scripts/$package start >> message-log/$package.log &
                start_pid=$!
                pkg_state="starting"
             else
-               control-scripts/$package stop >> message-log/$package.stop.log &
+               control-scripts/$package stop >> message-log/$package.log &
                stop_pid=$!
                pkg_state="failing"
             fi 
@@ -235,5 +244,4 @@ trap '' USR1
        ;;
       esac # role
    done
-   echo ops
 } 9> temp/monitor_lock_$1

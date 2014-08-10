@@ -7,9 +7,9 @@
 # member of the consensus quorum but still need to operate
 # on the state-machine thus performing set or get operations.
 
-export sshopt="-o ConnectTimeout=1 -o ServerAliveInterval=2 \
--o ServerAliveCountMax=3 -o StrictHostKeyChecking=no \
--o ControlMaster=auto -o ControlPath=~/.ssh/lite-raft-socket-%h"
+sshopt="-o ControlPath=~/.ssh/lite-raft-socket-%h -o ControlMaster=auto \
+-o ConnectTimeout=1 -o ServerAliveInterval=2 -o ServerAliveCountMax=3 \
+-o PasswordAuthentication=no -o StrictHostKeyChecking=no -q"
 
 # change the following parameters to fit your configuration
 

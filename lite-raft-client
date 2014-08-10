@@ -3,9 +3,9 @@
 #Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
 #Distributed under the terms of a MIT license.
 
-export sshopt="-q -o ConnectTimeout=1 -o ServerAliveInterval=2 \
--o ServerAliveCountMax=3 -o StrictHostKeyChecking=no \
--o ControlMaster=auto -o ControlPath=~/.ssh/lite-raft-socket-%h"
+export sshopt="-o ControlPath=~/.ssh/lite-raft-socket-%h -o ControlMaster=auto \
+-o ConnectTimeout=1 -o ServerAliveInterval=2 -o ServerAliveCountMax=3 \
+-o PasswordAuthentication=no -o StrictHostKeyChecking=no -q"
 
 cd $(dirname $0)
 
@@ -66,6 +66,15 @@ if ! flock -e -w 0 temp/master_lock true ; then
          else
             echo returned error $?
          fi
+      ;;
+      *)
+         echo "Usage: ${0##*/} get [ key ]"
+         echo "                set { key } { value }"
+         echo "                unset { key }"
+         echo "                status | list | noop | no-op"
+         echo "                if { key } { binary-test-operator } { value } set { new-value }"
+         echo "                add-member { new-member }"
+         echo "                del-member { old-member }"
       ;;
       esac
 

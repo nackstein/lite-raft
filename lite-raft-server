@@ -3,9 +3,16 @@
 #Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
 #Distributed under the terms of a MIT license.
 
-export sshopt="-q -o ConnectTimeout=1 -o ServerAliveInterval=2 \
--o ServerAliveCountMax=3 -o StrictHostKeyChecking=no \
--o ControlMaster=auto -o ControlPath=~/.ssh/lite-raft-socket-%h"
+export sshopt="-o ControlPath=~/.ssh/lite-raft-socket-%h -o ControlMaster=auto \
+-o ConnectTimeout=1 -o ServerAliveInterval=2 -o ServerAliveCountMax=3 \
+-o PasswordAuthentication=no -o StrictHostKeyChecking=no -q"
+
+if [ -n "$1" ] ; then
+   echo "Usage: ${0##*/}"
+   echo "  This is the main server of lite-raft. Usually it's started"
+   echo "  with \"lite-raft start\" command."
+   exit 0
+fi
 
 cd $(dirname $0)
 mkdir -p /dev/shm/lite-raft/temp
@@ -41,17 +48,19 @@ done &
    read cluster_nodes < conf/cluster_nodes
    read snapshot_period < conf/snapshot_period
 
-   echo $(date) starting as follower.
+   echo "$(date) starting as follower."
    while true ; do
       read server_role < temp/server_role
-      sleep 1 &
+      sleep 1 & sleep_pid=$!
       case "$server_role" in 
        follower)
          flock -e -w 1 temp/activity_lock internals/follower
        ;;
        candidate)
          #usleep between 0 and 1020000 microseconds
-         usleep $(($(od -An -N1 -d /dev/urandom)*4000))
+         #usleep $(($(od -An -N1 -d /dev/urandom)*4000))
+         #sleep between 0 and 0.999600 seconds. more portable than usleep.
+         sleep 0.$(($(od -An -N1 -d /dev/urandom)*3920))
          flock -e -w 1 temp/activity_lock internals/candidate
        ;;
        leader)
@@ -68,7 +77,7 @@ done &
          flock -e -w 1 temp/activity_lock internals/create-snapshot
       fi
 
-      wait %2
+      wait $sleep_pid
    done
    
 } 9> temp/master_lock

@@ -14,8 +14,12 @@ while [ "$last_log_applied" -lt "$commit_index" ] ; do
       echo "$value" > state-machine-data/"$key"
    ;;
    unset)
-      rm -f state-machine-data/"$key"
-      find state-machine-data/$(dirname "$key")/ -empty -type d -delete
+      key="${key#/}"
+      key=state-machine-data/"$key"
+      rm -f "$key"
+      [ -d $(dirname "$key") ] && rmdir $(dirname "$key") 2>/dev/null
+      #find state-machine-data/$(dirname "$key")/ -empty -type d -delete
+      #find state-machine-data/$(dirname "$key")/ -empty -type d -exec rm -r \{\} \;
    ;;
    esac
    last_log_applied=$(($last_log_applied+1))

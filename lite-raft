@@ -3,13 +3,10 @@
 #Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
 #Distributed under the terms of a MIT license.
 
-set -e
-
-#export sshopt="-o ConnectTimeout=1 -o StrictHostKeyChecking=no"
 cd $(dirname $0)
 
 case "$1" in
-first-boot)
+ first-boot)
    if [ -f temp/master_lock ] ; then
       if ! flock -e -w 0 temp/master_lock true ; then
          echo temp/master_lock is locked. cannot initialize state-machine.
@@ -24,8 +21,9 @@ first-boot)
    echo 0  > state/last_log_index
    echo "" > state/voted_for
    ./lite-raft-server > message-log/lite-raft-server.log &
-;;
-start)
+ ;;
+
+ start)
    if [ -f temp/master_lock ] ; then
       if ! flock -e -w 0 temp/master_lock true ; then
          echo temp/master_lock is locked. server already started.
@@ -34,10 +32,24 @@ start)
    fi
    echo start
    ./lite-raft-server > message-log/lite-raft-server.log &
-;;
-stop)
+ ;;
+
+ stop)
    echo stop
-   pkill -f "/bin/dash ./lite-raft-server"
-   fuser -s -k -TERM ~/.ssh/lite-raft-socket-*
-;;
+   shell_cmd=$(head -1 lite-raft-server)
+   shell_cmd=${shell_cmd#\#!}
+   pkill -x -f "$shell_cmd ./lite-raft-server"
+   fuser -s -k -TERM ~/.ssh/lite-raft-socket-* 2>/dev/null
+ ;;
+
+ *)
+   echo "Usage: ${0##*/} { first-boot | start | stop }"
+   echo "  Main script to start and stop lite-raft service or initialize"
+   echo "  lite-raft state machine data and logs."
+   echo "      start   start lite-raft-server. preserve data and log"
+   echo "       stop   stop lite-raft-server and child processes."
+   echo " first-boot   cancel information in the local state machine data and"
+   echo "              logs and start lite-raft-server. Execute this command"
+   echo "              on every node where you want to cancel every data."
+ ;;
 esac

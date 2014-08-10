@@ -1,6 +1,5 @@
 #!/bin/dash
 
-PATH=$(dirname $0):$PATH
 cd $(dirname $0)
 
 case $1 in
@@ -16,17 +15,19 @@ case $1 in
          exit 1
       fi
    fi 
-   pkg-mon $2 > message-log/pkg-mon.$2.log &
+   ./pkg-mon $2 > message-log/pkg-mon.$2.log &
  ;;
 
  stop)
-   echo -n "sending TERM signal and waiting for package to halt"
-   pkill -f "/bin/dash pkg-mon $2"
-   while pkill -SIGUSR1 -f "/bin/dash pkg-mon $2" ; do
-      echo -n .
+   echo -n "sending TERM signal and waiting for package to halt."
+   shell_cmd=$(head -1 pkg-mon)
+   shell_cmd=${shell_cmd#\#!}
+   pkill -x -f "$shell_cmd ./pkg-mon $2"
+   while pkill -SIGUSR1 -x -f "$shell_cmd ./pkg-mon $2" ; do
       sleep 1
+      echo -n .
    done
-   fuser -s -k -TERM ~/.ssh/lite-raft-socket-*
+   fuser -s -k -TERM ~/.ssh/lite-raft-socket-* 2>/dev/null
    echo " done."
  ;;
 
@@ -43,6 +44,9 @@ case $1 in
    echo -n "package owner: " ; lite-raft-remote get packages/$2/owner
    echo -n "package state: " ; lite-raft-remote get packages/$2/state
    echo -n "package tick:  " ; lite-raft-remote get packages/$2/tick
-
  ;;
+
+ *)
+   echo "Usage: ${0##*/} { init | start | stop | status }"
+   echo "  Main script to init, start or stop the package monitor service."
 esac

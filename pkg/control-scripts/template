@@ -1,7 +1,7 @@
 #!/bin/dash
 
 timeout=20
-ip=192.168.68.68; prefix=24; netdev=eth0
+#ip=192.168.68.68; prefix=24; netdev=eth0
 start_timeout=10
 stop_timeout=10
 
@@ -41,8 +41,8 @@ case $1 in
  ;;
 
  status)
-   num_check=3
-   failed_check=3
+   num_check=2
+   failed_check=2
 
    # can return 3 values: 0 up, 1 down, 2 degraded
    
@@ -58,6 +58,8 @@ case $1 in
    
    # monitor network
    if [ -n "$ip" ] ; then
+      num_check=$(($num_check+1))
+      failed_check=$(($failed_check+1))
       if ip addr show dev $netdev | grep -q -F " $ip/$prefix " ; then
          failed_check=$(($failed_check-1))
       fi

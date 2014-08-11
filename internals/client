@@ -3,6 +3,8 @@
 #Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
 #Distributed under the terms of a MIT license.
 
+. internals/activity-lock
+
 case $1 in
 get|list)
    #the get function try to always return something. if you need to be
@@ -19,14 +21,14 @@ get|list)
                echo $val
             else
                echo key "$2" does not exit. >&2
-               exit 1
+               quit 1
             fi
          else
             if [ -d state-machine-data/"$2" ] ; then
                ls -1 state-machine-data/"$2"
             else
                echo directory "$2" does not exit. >&2
-               exit 1
+               quit 1
             fi
          fi
       else
@@ -34,7 +36,7 @@ get|list)
       fi
    else
       echo leader is stale. try again. >&2
-      exit 1
+      quit 1
    fi
 ;;
 if|set|unset|noop|conf_old_new|conf_new)
@@ -62,21 +64,21 @@ if|set|unset|noop|conf_old_new|conf_new)
                if [ "$val" "$3" "$4" ] ; then
                   if [ "$val" = "$6" ] ; then
                      echo value of "$2" already set to "$6" >&2
-                     exit 5
+                     quit 5
                   fi
                   #change positional paramter to perform a normal "set" in append-entry below
                   set -- "set" "$2" "$6"
                else
                   echo value of "$2" does not match "$4" >&2
-                  exit 6
+                  quit 6
                fi
             else
                echo key "$2" does not exist. >&2
-               exit 7
+               quit 7
             fi
          else
             echo leader is stale. try again. >&2
-            exit 1
+            quit 1
          fi
       fi
 
@@ -90,14 +92,14 @@ if|set|unset|noop|conf_old_new|conf_new)
          done
       fi
 
-      internals/append-entry $current_term $hostname $last_log_index $last_log_term \
+      nolock="true" internals/append-entry $current_term $hostname $last_log_index $last_log_term \
          $current_term "$1" "$2 $3" $commit_index > temp/${hostname}_append_result
       read term result < temp/${hostname}_append_result
 
       if [ "$term" -eq "$current_term" -a "$result" = "true" ] ; then
          #append entry returned ok, now try to commit the change
          entry_index=$(($last_log_index+1))
-         internals/leader
+         nolock="true" internals/leader
          read commit_index < temp/commit_index
 
          if [ "$commit_index" -ge "$entry_index" -a -f state-machine-log/$entry_index/$term ] ; then
@@ -105,16 +107,18 @@ if|set|unset|noop|conf_old_new|conf_new)
             :
          else
             echo timeout waiting for commit. >&2
-            exit 2
+            quit 2
          fi
 
       else
          echo append-entry failed. >&2
-         exit 3
+         quit 3
       fi
    else
       echo $hostname not leader. >&2
-      exit 4
+      quit 4
    fi
 ;;
 esac
+
+quit 0

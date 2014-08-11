@@ -3,6 +3,8 @@
 #Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
 #Distributed under the terms of a MIT license.
 
+. internals/activity-lock
+
 read last_log_applied < temp/last_log_applied
 
 if [ -d state-machine-log/"$last_log_applied" ] ; then
@@ -39,3 +41,5 @@ if cp -r conf/cluster_nodes* state-machine-data state-machine-snapshot/new/ ; th
       rm -rf state-machine-log/$log
    done
 fi
+
+quit 0

@@ -7,7 +7,7 @@ export sshopt="-o ControlPath=~/.ssh/lite-raft-socket-%h -o ControlMaster=auto \
 -o ConnectTimeout=1 -o ServerAliveInterval=2 -o ServerAliveCountMax=3 \
 -o PasswordAuthentication=no -o StrictHostKeyChecking=no -q"
 
-if [ -n "$1" ] ; then
+if [ $# -ne 0 ] ; then
    echo "Usage: ${0##*/}"
    echo "  This is the main server of lite-raft. Usually it's started"
    echo "  with \"lite-raft start\" command."
@@ -15,9 +15,31 @@ if [ -n "$1" ] ; then
 fi
 
 cd $(dirname $0)
-mkdir -p /dev/shm/lite-raft/temp
+case $(uname) in
+ HP-UX)
+   mkdir -p temp
+   hostname=$(hostname)
+   hostname=${hostname%%.*}
+   alias sleep="utils/sleep.hpux"
+   #rand_dev=/dev/urandom
+ ;;
+ #OpenBSD)
+ #  rand_dev=/dev/arandom
+ #;;
+ *)
+   mkdir -p /dev/shm/lite-raft/temp
+   ln -sf /dev/shm/lite-raft/temp temp
+   hostname=$(hostname -s)
+   #rand_dev=/dev/urandom
+ ;;
+esac
 
-hostname=$(hostname -s)
+trap 'rmdir temp/master_lockdir; exit 0' HUP INT TERM
+if ! mkdir temp/master_lockdir 2> /dev/null ; then
+   echo "cannot create lockdir. check if another lite-raft-server is running."
+   exit 1
+fi
+
 while true ; do
    read cluster_nodes < conf/cluster_nodes
    for h in $cluster_nodes ; do
@@ -28,56 +50,48 @@ while true ; do
    sleep 4
 done &
 
-{
-   flock -e 9
-    
-   echo ""       > temp/current_leader
-   echo follower > temp/server_role
-   echo 0        > temp/commit_index
-   echo false    > temp/quorum_heartbeat
-   cp conf/election_timeout temp/election_timeout
-   
+echo ""       > temp/current_leader
+echo follower > temp/server_role
+echo 0        > temp/commit_index
+echo false    > temp/quorum_heartbeat
+cp conf/election_timeout temp/election_timeout
+
+if [ -f state-machine-snapshot/cur/last_included_index ] ; then
+   cp state-machine-snapshot/cur/last_included_index temp/last_log_applied
+else
+   echo 0 > temp/last_log_applied
+fi
+
+echo $hostname > temp/hostname
+read cluster_nodes < conf/cluster_nodes
+read snapshot_period < conf/snapshot_period
+
+echo "$(date) starting as follower."
+while true ; do
+   read server_role < temp/server_role
+   sleep 1 & sleep_pid=$!
+   case "$server_role" in 
+    follower)
+      lock_timeout=10 internals/follower
+    ;;
+    candidate)
+      #sleep between 0 and 0.999600 seconds.
+      sleep 0.$(($(od -An -N1 -tu1 /dev/urandom)*3920))
+      lock_timeout=10 internals/candidate
+    ;;
+    leader)
+      lock_timeout=10 internals/leader
+    ;;
+   esac
+
+   first_log_index=0
    if [ -f state-machine-snapshot/cur/last_included_index ] ; then
-      cp state-machine-snapshot/cur/last_included_index temp/last_log_applied
-   else
-      echo 0 > temp/last_log_applied
+      read first_log_index < state-machine-snapshot/cur/last_included_index
+   fi
+   read last_log_index < state/last_log_index
+   if [ $(($last_log_index-$first_log_index)) -gt $snapshot_period ] ; then
+      lock_timeout=10 internals/create-snapshot
    fi
 
-   hostname -s > temp/hostname
-   read hostname < temp/hostname
-   read cluster_nodes < conf/cluster_nodes
-   read snapshot_period < conf/snapshot_period
-
-   echo "$(date) starting as follower."
-   while true ; do
-      read server_role < temp/server_role
-      sleep 1 & sleep_pid=$!
-      case "$server_role" in 
-       follower)
-         flock -e -w 1 temp/activity_lock internals/follower
-       ;;
-       candidate)
-         #usleep between 0 and 1020000 microseconds
-         #usleep $(($(od -An -N1 -d /dev/urandom)*4000))
-         #sleep between 0 and 0.999600 seconds. more portable than usleep.
-         sleep 0.$(($(od -An -N1 -d /dev/urandom)*3920))
-         flock -e -w 1 temp/activity_lock internals/candidate
-       ;;
-       leader)
-         flock -e -w 1 temp/activity_lock internals/leader
-       ;;
-      esac
-
-      first_log_index=0
-      if [ -f state-machine-snapshot/cur/last_included_index ] ; then
-         read first_log_index < state-machine-snapshot/cur/last_included_index
-      fi
-      read last_log_index < state/last_log_index
-      if [ $(($last_log_index-$first_log_index)) -gt $snapshot_period ] ; then
-         flock -e -w 1 temp/activity_lock internals/create-snapshot
-      fi
-
-      wait $sleep_pid
-   done
-   
-} 9> temp/master_lock
+   wait $sleep_pid
+done

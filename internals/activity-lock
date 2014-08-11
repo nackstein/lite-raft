@@ -1,0 +1,34 @@
+#!/bin/dash
+
+#Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
+#Distributed under the terms of a MIT license.
+
+if [ -z "$nolock" ] ; then
+   quit () {
+      rmdir temp/activity_lockdir
+      exit $1
+   }
+
+   trap 'quit 0' HUP INT TERM
+
+   until mkdir temp/activity_lockdir 2> /dev/null ; do
+      if [ -n "$lock_timeout" ] ; then
+         lock_timeout=$(($lock_timeout-1))
+         [ "$lock_timeout" -lt 0 ] && exit 1
+      fi
+
+      case $(uname) in
+       HP-UX)
+         utils/sleep.hpux 0.1
+       ;;
+       *)
+         sleep 0.1
+       ;;
+      esac
+
+   done
+
+else
+   quit () { exit $1; }
+   trap 'quit 0' HUP INT TERM
+fi

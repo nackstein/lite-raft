@@ -6,13 +6,15 @@
 #input  term candidate_id last_log_index last_log_term
 #output term vote_granted
 
+. internals/activity-lock
+
 read current_term   < state/current_term
 read voted_for      < state/voted_for
 read last_log_index < state/last_log_index
 read cluster_nodes  < conf/cluster_nodes
 valid_candidate=false
 
-if ! flock -e -w 0 temp/master_lock true ; then
+if [ -d temp/master_lockdir ] ; then
    for h in $cluster_nodes ; do
       [ "$h" = "$hostname" ] && continue
       if [ "$2" = "$h" ] ; then
@@ -62,3 +64,5 @@ else
    #master process is not running, return error
    echo 0 false
 fi
+
+quit 0

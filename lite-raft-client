@@ -14,7 +14,7 @@ read hostname         < temp/hostname
 read current_leader   < temp/current_leader
 read cluster_nodes    < conf/cluster_nodes
 
-if ! flock -e -w 0 temp/master_lock true ; then
+if [ -d temp/master_lockdir ] ; then
    if [ "$server_role" = "leader" ] ; then
       case "$1" in
       if|set|unset)
@@ -22,16 +22,16 @@ if ! flock -e -w 0 temp/master_lock true ; then
             echo missing argument
             exit 1
          fi
-         flock -e temp/activity_lock internals/client "$@"
+         internals/client "$@"
       ;;
       noop|no-op)
-         flock -e temp/activity_lock internals/client "noop"
+         internals/client "noop"
       ;;
       get)
-         flock -s temp/activity_lock internals/client get "$2"
+         internals/client get "$2"
       ;;
       list)
-         flock -s temp/activity_lock internals/client list "$2"
+         internals/client list "$2"
       ;;
       status)
          read last_log_index < state/last_log_index
@@ -50,14 +50,15 @@ if ! flock -e -w 0 temp/master_lock true ; then
          read cluster_nodes < conf/cluster_nodes
          cluster_nodes_new="$cluster_nodes $2"
          if [ "$1" = "del-member" ] ; then
-            cluster_nodes_new=$(for h in $cluster_nodes; do [ "$h" != "$2" ] && echo -n "$h "; done)
+            #use printf instead of echo -n since hp-ux does not support echo -n (have print instead)
+            cluster_nodes_new=$(for h in $cluster_nodes; do [ "$h" != "$2" ] && printf "$h "; done)
          fi
          [ "$1" = "add-member" ] && ssh $sshopt $2 cd "'"$PWD"'" \; ./lite-raft first-boot
          echo inserting conf_old_new.
-         if flock -e temp/activity_lock internals/client conf_old_new "$cluster_nodes_new" ; then
+         if internals/client conf_old_new "$cluster_nodes_new" ; then
             echo conf_old_new committed.
             echo inserting conf_new.
-            if flock -e temp/activity_lock internals/client conf_new ; then
+            if internals/client conf_new ; then
                echo conf_new committed.
                [ "$1" = "del-member" ] && ssh $sshopt $2 cd "'"$PWD"'" \; ./lite-raft stop
             else

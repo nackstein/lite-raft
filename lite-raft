@@ -7,15 +7,24 @@ cd $(dirname $0)
 
 case "$1" in
  first-boot)
-   if [ -f temp/master_lock ] ; then
-      if ! flock -e -w 0 temp/master_lock true ; then
-         echo temp/master_lock is locked. cannot initialize state-machine.
-         exit 1
-      fi
+   if [ -d temp/master_lockdir ] ; then
+      echo temp/master_lock is locked. cannot initialize state-machine.
+      exit 1
    fi
    echo first-boot
-   rm -rf   state state-machine-log   state-machine-data state-machine-snapshot /dev/shm/lite-raft/temp
-   mkdir -p state state-machine-log/0 state-machine-data state-machine-snapshot /dev/shm/lite-raft/temp
+   rm -rf   state state-machine-log   state-machine-data state-machine-snapshot
+   mkdir -p state state-machine-log/0 state-machine-data state-machine-snapshot
+
+   case $(uname) in
+    HP-UX)
+      mkdir -p temp
+    ;;
+    *)
+      mkdir -p /dev/shm/lite-raft/temp
+      ln -sf /dev/shm/lite-raft/temp temp
+    ;;
+   esac
+    
    touch state-machine-log/0/0
    echo 0  > state/current_term
    echo 0  > state/last_log_index
@@ -24,11 +33,9 @@ case "$1" in
  ;;
 
  start)
-   if [ -f temp/master_lock ] ; then
-      if ! flock -e -w 0 temp/master_lock true ; then
-         echo temp/master_lock is locked. server already started.
-         exit 1
-      fi
+   if [ -d temp/master_lockdir ] ; then
+      echo temp/master_lock is locked. server already started.
+      exit 1
    fi
    echo start
    ./lite-raft-server > message-log/lite-raft-server.log &

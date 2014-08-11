@@ -10,9 +10,11 @@
 #        $1   $2
 #output term
 
+. internals/activity-lock
+
 read current_term    < state/current_term
 
-if ! flock -e -w 0 temp/master_lock true ; then
+if [ -d temp/master_lockdir ] ; then
    if [ "$1" -ge "$current_term" ] ; then
       current_term=$1
       echo follower > temp/server_role
@@ -37,3 +39,5 @@ else
    #no process running here, return term 0 as error
    echo 0
 fi
+
+quit 0

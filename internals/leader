@@ -7,6 +7,8 @@
 #input  term leader_id prev_log_index prev_log_term entry_term entry_command entry leader_commit
 #output term success
 
+. internals/activity-lock
+
 read current_term     < state/current_term
 read last_log_index   < state/last_log_index
 read commit_index     < temp/commit_index
@@ -43,10 +45,9 @@ for h in $cluster_nodes_old_new; do
          entry_term=${entry_term##state-machine-log/*/}
          read entry_command entry_value < $(echo state-machine-log/$next_index/$entry_term)
          
-         ssh $sshopt $h cd "'"$PWD"'" \; flock -e -w 0.4 temp/activity_lock \
-            internals/append-entry $current_term $hostname $prev_log_index \
-            $prev_log_term "'"$entry_term"'" "'"$entry_command"'" "'"$entry_value"'" \
-            $commit_index > temp/${h}_append_result < /dev/null
+         ssh $sshopt $h cd "'"$PWD"'" \; lock_timeout=4 internals/append-entry $current_term \
+            $hostname $prev_log_index $prev_log_term "'"$entry_term"'" "'"$entry_command"'" \
+            "'"$entry_value"'" $commit_index > temp/${h}_append_result < /dev/null
 
          read term success < temp/${h}_append_result
 
@@ -62,9 +63,9 @@ for h in $cluster_nodes_old_new; do
             next_index=$(($prev_log_index+1))
          fi
 
-         ssh $sshopt $h cd "'"$PWD"'" \; flock -e -w 0.4 temp/activity_lock \
-            internals/append-entry $current_term $hostname $prev_log_index \
-            $prev_log_term "''" "''" "''" $commit_index > temp/${h}_append_result < /dev/null
+         ssh $sshopt $h cd "'"$PWD"'" \; lock_timeout=4 internals/append-entry $current_term \
+            $hostname $prev_log_index $prev_log_term "''" "''" "''" \
+            $commit_index > temp/${h}_append_result < /dev/null
 
          read term success < temp/${h}_append_result
 
@@ -74,8 +75,7 @@ for h in $cluster_nodes_old_new; do
          read prev_log_term  < state-machine-snapshot/cur/last_included_term
 
          find state-machine-snapshot/cur | cpio -co --quiet | ssh $sshopt $h cd "'"$PWD"'" \; \
-            flock -e -w 0.4 temp/activity_lock internals/install-snapshot \
-            $current_term $hostname > temp/${h}_append_result
+            lock_timeout=4 internals/install-snapshot $current_term $hostname > temp/${h}_append_result
 
          read term < temp/${h}_append_result
          success="true"
@@ -112,7 +112,7 @@ done
 wait
 
 read server_role < temp/server_role
-[ "$server_role" != "leader" ] && exit
+[ "$server_role" != "leader" ] && quit 0
 
 quorum_heartbeat=true
 N=$last_log_index
@@ -139,7 +139,7 @@ for configuration in "$cluster_nodes" "$cluster_nodes_new" ; do
             majority_match=$match_index
          fi
       done
-
+      
       [ "$majority_match" -lt "$N" -a "$majority_match" -ge "$commit_index" ] && N=$majority_match
       [ "$q" -lt "$majority" ] && quorum_heartbeat=false
    fi 
@@ -152,3 +152,5 @@ fi
 echo $quorum_heartbeat > temp/quorum_heartbeat
 
 . internals/apply-log
+
+quit 0

@@ -21,9 +21,7 @@ user=raft
 # note: echo -n is not supported on hp-ux so we use printf
 
 randlist () {
-   n=$(od -An -N1 -tu1 /dev/urandom)
-   #on some OS leading 0 can trigger octal syntax error (like 069)
-   n=$(((${n##*[ 0]0}+0)%$#+1))
+   n=$((0x$(echo $(od -An -N1 -tx1 /dev/urandom))%$#+1))
 
    i=$n
    while [ $i -lt $(($#+1)) ] ; do

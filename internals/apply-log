@@ -17,7 +17,8 @@ while [ "$last_log_applied" -lt "$commit_index" ] ; do
       key="${key#/}"
       key=state-machine-data/"$key"
       rm -f "$key"
-      [ -d $(dirname "$key") ] && rmdir $(dirname "$key") 2>/dev/null
+      key=$(dirname $key)
+      [ -d "$key" -a "$key" != "state-machine-data" ] && rmdir "$key" 2>/dev/null
       #find state-machine-data/$(dirname "$key")/ -empty -type d -delete
       #find state-machine-data/$(dirname "$key")/ -empty -type d -exec rm -r \{\} \;
    ;;

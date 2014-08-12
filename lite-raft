@@ -1,4 +1,4 @@
-#!/bin/dash
+#!/usr/bin/env sh
 
 #Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
 #Distributed under the terms of a MIT license.
@@ -11,20 +11,35 @@ case "$1" in
       echo temp/master_lock is locked. cannot initialize state-machine.
       exit 1
    fi
+
    echo first-boot
+
+   if [ -n "$2" ] ; then
+      shell="$2" 
+   else
+      shell=$(which sh)
+   fi
+
+   #for now exclude script in pkg/control-scrips, they can use different languages.
+   for f in lite-raft-* internals/* pkg/pkg* pkg/lite-raft-remote ; do
+      #some sed don't support -i
+      sed -e "s|^#!.*|#!$shell|" < $f > temp123
+      chmod +x temp123
+      mv temp123 $f
+   done
+
    rm -rf   state state-machine-log   state-machine-data state-machine-snapshot
    mkdir -p state state-machine-log/0 state-machine-data state-machine-snapshot
 
-   case $(uname) in
-    HP-UX)
-      mkdir -p temp
-    ;;
-    *)
+   if [ -d /dev/shm ] ; then
       mkdir -p /dev/shm/lite-raft/temp
       ln -sf /dev/shm/lite-raft/temp temp
-    ;;
-   esac
+   else
+      mkdir -p temp
+   fi
     
+   mkdir -p temp/activity_lockdir_un
+
    touch state-machine-log/0/0
    echo 0  > state/current_term
    echo 0  > state/last_log_index
@@ -50,7 +65,7 @@ case "$1" in
  ;;
 
  *)
-   echo "Usage: ${0##*/} { first-boot | start | stop }"
+   echo "Usage: ${0##*/} { first-boot [ shell ] | start | stop }"
    echo "  Main script to start and stop lite-raft service or initialize"
    echo "  lite-raft state machine data and logs."
    echo "      start   start lite-raft-server. preserve data and log"
@@ -58,5 +73,6 @@ case "$1" in
    echo " first-boot   cancel information in the local state machine data and"
    echo "              logs and start lite-raft-server. Execute this command"
    echo "              on every node where you want to cancel every data."
+   echo "              you can specify which posix shell to use for every script."
  ;;
 esac

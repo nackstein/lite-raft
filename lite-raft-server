@@ -7,6 +7,9 @@ export sshopt="-o ControlPath=~/.ssh/lite-raft-socket-%h -o ControlMaster=auto \
 -o ConnectTimeout=1 -o ServerAliveInterval=2 -o ServerAliveCountMax=3 \
 -o PasswordAuthentication=no -o StrictHostKeyChecking=no -q"
 
+#this makes binaries a little faster on linux
+export LANG=C
+
 if [ $# -ne 0 ] ; then
    echo "Usage: ${0##*/}"
    echo "  This is the main server of lite-raft. Usually it's started"
@@ -15,24 +18,17 @@ if [ $# -ne 0 ] ; then
 fi
 
 cd $(dirname $0)
-case $(uname) in
- HP-UX)
-   mkdir -p temp
-   hostname=$(hostname)
-   hostname=${hostname%%.*}
-   alias sleep="utils/sleep.hpux"
-   #rand_dev=/dev/urandom
- ;;
- #OpenBSD)
- #  rand_dev=/dev/arandom
- #;;
- *)
+
+if [ -d /dev/shm ] ; then
    mkdir -p /dev/shm/lite-raft/temp
    ln -sf /dev/shm/lite-raft/temp temp
-   hostname=$(hostname -s)
-   #rand_dev=/dev/urandom
- ;;
-esac
+else
+   mkdir -p temp
+fi
+
+#hostname -s is not supported on HP-UX
+hostname=$(hostname)
+hostname=${hostname%%.*}
 
 trap 'rmdir temp/master_lockdir; exit 0' HUP INT TERM
 if ! mkdir temp/master_lockdir 2> /dev/null ; then
@@ -75,8 +71,10 @@ while true ; do
       lock_timeout=10 internals/follower
     ;;
     candidate)
-      #sleep between 0 and 0.999600 seconds.
-      sleep 0.$(($(od -An -N1 -tu1 /dev/urandom)*3920))
+      #sleep between 0 and 0.999600 seconds. 
+      delay=0.$(($(od -An -N1 -tu1 /dev/urandom)*3920))
+      #where sleep doesn't support decimal fallback to perl sleep.
+      sleep $delay 2> /dev/null || utils/sleep.pl $delay
       lock_timeout=10 internals/candidate
     ;;
     leader)

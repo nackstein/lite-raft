@@ -3,10 +3,10 @@
 #Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
 #Distributed under the terms of a MIT license.
 
-. internals/activity-lock
-
 case $1 in
 get|list)
+   . internals/activity-lock-sh
+
    #the get function try to always return something. if you need to be
    #sure that the leader is not stale you should commit a noop before calling get
    read last_log_index   < state/last_log_index
@@ -40,6 +40,8 @@ get|list)
    fi
 ;;
 if|set|unset|noop|conf_old_new|conf_new)
+   . internals/activity-lock-ex
+
    read hostname         < temp/hostname
    read server_role      < temp/server_role
    read current_term     < state/current_term
@@ -66,7 +68,7 @@ if|set|unset|noop|conf_old_new|conf_new)
                      echo value of "$2" already set to "$6" >&2
                      quit 5
                   fi
-                  #change positional paramter to perform a normal "set" in append-entry below
+                  #change positional parameter to perform a normal "set" in append-entry below
                   set -- "set" "$2" "$6"
                else
                   echo value of "$2" does not match "$4" >&2

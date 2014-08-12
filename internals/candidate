@@ -9,7 +9,7 @@
 
 #todo check if present in configuration for che configuration change
 
-. internals/activity-lock
+. internals/activity-lock-ex
 
 read election_timeout < temp/election_timeout
 election_timeout=$(($election_timeout-1))

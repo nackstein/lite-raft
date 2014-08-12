@@ -14,20 +14,11 @@ sshopt="-o ControlPath=~/.ssh/lite-raft-socket-%h -o ControlMaster=auto \
 # change the following parameters to fit your configuration
 
 cluster_nodes="host1 host2 host3"
-lite_raft_path="/root/lite-raft"
-user=root
+lite_raft_path="/home/raft/lite-raft"
+user=raft
 
 ################################################################
 # note: echo -n is not supported on hp-ux so we use printf
-
-#case $(uname) in
-# OpenBSD)
-#   rand_dev="/dev/arandom"
-# ;;
-# *)
-#   rand_dev="/dev/urandom"
-# ;;
-#esac
 
 randlist () {
    n=$(od -An -N1 -tu1 /dev/urandom)

@@ -7,7 +7,12 @@
 #input  term leader_id prev_log_index prev_log_term entry_term entry_command entry leader_commit
 #output term success
 
-. internals/activity-lock
+if [ -z "$nolock" ] ; then
+   . internals/activity-lock-ex
+else
+   quit () { exit $1; }
+   trap 'quit 0' HUP INT TERM
+fi
 
 read current_term     < state/current_term
 read last_log_index   < state/last_log_index

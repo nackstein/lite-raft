@@ -10,7 +10,7 @@
 #        $1   $2
 #output term
 
-. internals/activity-lock
+. internals/activity-lock-ex
 
 read current_term    < state/current_term
 

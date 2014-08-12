@@ -22,7 +22,8 @@ user=raft
 
 randlist () {
    n=$(od -An -N1 -tu1 /dev/urandom)
-   n=$(($n%$#+1))
+   #on some OS leading 0 can trigger octal syntax error (like 069)
+   n=$(((${n##*[ 0]0}+0)%$#+1))
 
    i=$n
    while [ $i -lt $(($#+1)) ] ; do

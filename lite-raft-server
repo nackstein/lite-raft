@@ -72,7 +72,9 @@ while true ; do
     ;;
     candidate)
       #sleep between 0 and 0.999600 seconds. 
-      delay=0.$(($(od -An -N1 -tu1 /dev/urandom)*3920))
+      delay=$(od -An -N1 -tu1 /dev/urandom)
+      #on some OS leading 0 can trigger octal syntax error (like 069)
+      delay=0.$(((${delay##*[ 0]0}+0)*3920))
       #where sleep doesn't support decimal fallback to perl sleep.
       sleep $delay 2> /dev/null || utils/sleep.pl $delay
       lock_timeout=10 internals/candidate

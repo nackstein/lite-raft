@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/bin/sh
 
 #Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
 #Distributed under the terms of a MIT license.
@@ -14,11 +14,7 @@ case "$1" in
 
    echo first-boot
 
-   if [ -n "$2" ] ; then
-      shell="$2" 
-   else
-      shell=$(which sh)
-   fi
+   shell="${2:-/bin/sh}" 
 
    #for now exclude script in pkg/control-scrips, they can use different languages.
    for f in lite-raft-* internals/* pkg/pkg* pkg/lite-raft-remote ; do
@@ -40,7 +36,7 @@ case "$1" in
     
    mkdir -p temp/activity_lockdir_un
 
-   touch state-machine-log/0/0
+   echo "" > state-machine-log/0/0
    echo 0  > state/current_term
    echo 0  > state/last_log_index
    echo "" > state/voted_for
@@ -61,7 +57,8 @@ case "$1" in
    shell_cmd=$(head -1 lite-raft-server)
    shell_cmd=${shell_cmd#\#!}
    pkill -x -f "$shell_cmd ./lite-raft-server"
-   fuser -s -k -TERM ~/.ssh/lite-raft-socket-* 2>/dev/null
+   #fuser -s -k -TERM ~/.ssh/lite-raft-socket-* 2>/dev/null
+   pkill -x -f "ssh -MNf -o ControlPath=~/.ssh/lite-raft-socket-%h"
  ;;
 
  *)

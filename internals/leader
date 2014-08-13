@@ -79,7 +79,7 @@ for h in $cluster_nodes_old_new; do
          read prev_log_index < state-machine-snapshot/cur/last_included_index
          read prev_log_term  < state-machine-snapshot/cur/last_included_term
 
-         find state-machine-snapshot/cur | cpio -co --quiet | ssh $sshopt $h cd "'"$PWD"'" \; \
+         pax -wx cpio state-machine-snapshot/cur | ssh $sshopt $h cd "'"$PWD"'" \; \
             lock_timeout=4 internals/install-snapshot $current_term $hostname > temp/${h}_append_result
 
          read term < temp/${h}_append_result

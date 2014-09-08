@@ -10,11 +10,10 @@
 #        $1   $2
 #output term
 
-. internals/activity-lock-ex
-
-read current_term    < state/current_term
-
 if [ -d temp/master_lockdir ] ; then
+   . internals/activity-lock-ex
+
+   read current_term    < state/current_term
    if [ "$1" -ge "$current_term" ] ; then
       current_term=$1
       echo follower > temp/server_role
@@ -35,9 +34,10 @@ if [ -d temp/master_lockdir ] ; then
    fi
    #return term to update leader
    echo $current_term
+
+   quit 0
 else
    #no process running here, return term 0 as error
    echo 0
 fi
 
-quit 0

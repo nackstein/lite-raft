@@ -13,9 +13,9 @@ sshopt="-o ControlPath=~/.ssh/lite-raft-socket-%h -o ControlMaster=auto \
 
 # change the following parameters to fit your configuration
 
-cluster_nodes="host1 host2 host3"
-lite_raft_path="/home/raft/lite-raft"
-user=raft
+cluster_nodes="lizard"
+lite_raft_path="/home/vortex/lite-raft"
+user=vortex
 
 ################################################################
 # note: echo -n is not supported on hp-ux so we use printf

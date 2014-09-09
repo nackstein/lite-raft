@@ -76,3 +76,25 @@ read the code and give me feedback if you like it or not :)
 my mail: luigi.tarenga@gmail.com
 
 enjoy!
+
+required binaries (should be complete...):
+chmod
+cp
+date
+head
+hostname
+ls
+ln
+mv
+mkdir
+od
+pkill
+pgrep
+pax
+rm
+rmdir
+sed
+sleep (with decimal support)
+sort
+ssh
+perl  (on HP-UX or where sleep don't support decimal)

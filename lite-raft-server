@@ -67,17 +67,17 @@ while true ; do
    sleep 1 & sleep_pid=$!
    case "$server_role" in 
     follower)
-      lock_timeout=10 internals/follower
+      lock_timeout=10 internals/activity-lock-ex internals/follower
     ;;
     candidate)
       #sleep between 0 and 0.999600 seconds. hex trick is more portable.
       delay=0.$((0x$(echo $(od -An -N1 -tx1 /dev/urandom))*3920))
       #where sleep doesn't support decimal fallback to perl sleep.
       sleep $delay 2> /dev/null || utils/sleep.pl $delay
-      lock_timeout=10 internals/candidate
+      lock_timeout=10 internals/activity-lock-ex internals/candidate
     ;;
     leader)
-      lock_timeout=10 internals/leader
+      lock_timeout=10 internals/activity-lock-ex internals/leader
     ;;
    esac
 
@@ -88,7 +88,7 @@ while true ; do
    fi
    read last_log_index < state/last_log_index
    if [ $(($last_log_index-$first_log_index)) -gt $snapshot_period ] ; then
-      lock_timeout=10 internals/create-snapshot
+      lock_timeout=10 internals/activity-lock-ex internals/create-snapshot
    fi
 
    wait $sleep_pid

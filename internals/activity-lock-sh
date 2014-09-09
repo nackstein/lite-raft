@@ -3,21 +3,20 @@
 #Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
 #Distributed under the terms of a MIT license.
 
-#this script implement a shared lock. using flock is faster but less
-#portable. OpenBSD and HP-UX don't have a flock binary by default.
+export LANG=C
 
 quit () {
-   rm temp/activity_lockdir_sh/$$ 2> /dev/null && \
-   rmdir temp/activity_lockdir_sh 2> /dev/null && \
-   mkdir temp/activity_lockdir_un
+   rm temp/activity_lockdir_sh/$$ > /dev/null 2>&1 < /dev/null && \
+   rmdir temp/activity_lockdir_sh > /dev/null 2>&1 < /dev/null && \
+   mkdir temp/activity_lockdir_un > /dev/null 2>&1 < /dev/null
    exit $1
 }
 
 trap 'quit 0' HUP INT TERM
 
 until
-   mv temp/activity_lockdir_un temp/activity_lockdir_sh 2> /dev/null
-   ( echo "" > temp/activity_lockdir_sh/$$ ) 2> /dev/null
+   mv temp/activity_lockdir_un temp/activity_lockdir_sh > /dev/null 2>&1 < /dev/null
+   ( echo "" > temp/activity_lockdir_sh/$$ ) > /dev/null 2>&1 < /dev/null
 do
    if [ -n "$lock_timeout" ] ; then
       lock_timeout=$(($lock_timeout-1))
@@ -27,3 +26,6 @@ do
    #on HP-UX decimal seconds is not supported. use the perl implementation
    sleep 0.1 2> /dev/null || utils/sleep.pl 0.1
 done
+
+"$@"
+quit $?

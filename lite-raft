@@ -17,7 +17,7 @@ case "$1" in
    shell="${2:-/bin/sh}" 
 
    #for now exclude script in pkg/control-scrips, they can use different languages.
-   for f in lite-raft-* internals/* pkg/pkg* pkg/lite-raft-remote ; do
+   for f in lite-raft-* internals/* ; do
       #some sed don't support -i
       sed -e "s|^#!.*|#!$shell|" < $f > temp123
       chmod +x temp123
@@ -26,15 +26,6 @@ case "$1" in
 
    rm -rf   state state-machine-log   state-machine-data state-machine-snapshot
    mkdir -p state state-machine-log/0 state-machine-data state-machine-snapshot
-
-   if [ -d /dev/shm ] ; then
-      mkdir -p /dev/shm/lite-raft/temp
-      ln -sf /dev/shm/lite-raft/temp temp
-   else
-      mkdir -p temp
-   fi
-    
-   mkdir -p temp/activity_lockdir_un
 
    echo "" > state-machine-log/0/0
    echo 0  > state/current_term

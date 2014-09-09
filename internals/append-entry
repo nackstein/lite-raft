@@ -9,14 +9,6 @@
 #output term success
 
 if [ -d temp/master_lockdir ] ; then
-
-   if [ -z "$nolock" ] ; then
-      . internals/activity-lock-ex
-   else
-      quit () { exit $1; }
-      trap 'quit 0' HUP INT TERM
-   fi
-
    read current_term    < state/current_term
    read commit_index    < temp/commit_index
    read server_role     < temp/server_role
@@ -51,7 +43,7 @@ if [ -d temp/master_lockdir ] ; then
          rm -rf state-machine-log/$entry_index
          if [ "$6" = "conf_old_new" ] ; then
             #received a joint consensus command (Cold.new)
-            echo "$7"                   > conf/cluster_nodes_new
+            echo "$7" > conf/cluster_nodes_new
          elif [ "$6" = "conf_new" ] ; then
             #switch to new configuration
             mv conf/cluster_nodes_new conf/cluster_nodes
@@ -87,10 +79,7 @@ if [ -d temp/master_lockdir ] ; then
       #return error with updated term
       echo $current_term false
    fi
-
-   quit 0
 else
    #no process running here, return error
    echo 0 false
 fi
-

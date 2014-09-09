@@ -9,8 +9,6 @@
 
 #todo check if present in configuration for che configuration change
 
-. internals/activity-lock-ex
-
 read election_timeout < temp/election_timeout
 election_timeout=$(($election_timeout-1))
 echo $election_timeout > temp/election_timeout
@@ -56,8 +54,8 @@ if [ "$voted_for" = "$hostname" ] ; then
    for h in $cluster_nodes_old_new ; do
       [ "$h" = "$hostname" ] && continue
       votes=$(($votes+1))
-      ssh $sshopt $h cd "'"$PWD"'" \; lock_timeout=4 internals/request-vote $current_term \
-         $hostname $last_log_index $last_log_term > temp/${h}_vote < /dev/null &
+      ssh $sshopt $h "cd $PWD ; lock_timeout=4 exec internals/activity-lock-ex internals/request-vote " \
+                     "$current_term $hostname $last_log_index $last_log_term" > temp/${h}_vote < /dev/null &
    done
 
    wait
@@ -77,7 +75,7 @@ if [ "$voted_for" = "$hostname" ] ; then
             echo follower      > temp/server_role
             echo "$(($term+0))" > state/current_term
             echo $(date) $h sent a higher term. switching to follower.
-            quit 0
+            exit 0
          fi
          i=$(($i+1))
       done
@@ -96,7 +94,7 @@ if [ "$voted_for" = "$hostname" ] ; then
       done
       echo leader    > temp/server_role
       echo $hostname > temp/current_leader
-      nolock="true" internals/append-entry $current_term $hostname $last_log_index $last_log_term \
+      internals/append-entry $current_term $hostname $last_log_index $last_log_term \
          $current_term noop "" $commit_index > temp/${hostname}_append_result
       echo $(date) switching to leader.
    fi
@@ -105,5 +103,3 @@ else
    echo follower > temp/server_role
    echo $(date) already voted for another host. switching to follower.
 fi
-
-quit 0

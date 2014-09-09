@@ -7,8 +7,6 @@
 #output term vote_granted
 
 if [ -d temp/master_lockdir ] ; then
-   . internals/activity-lock-ex
-
    read current_term   < state/current_term
    read voted_for      < state/voted_for
    read last_log_index < state/last_log_index
@@ -60,10 +58,7 @@ if [ -d temp/master_lockdir ] ; then
       #term too old or candidate not in cluster configuration
       echo $current_term false
    fi
-
-   quit 0
 else
    #master process is not running, return error
    echo 0 false
 fi
-

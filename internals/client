@@ -5,8 +5,6 @@
 
 case $1 in
 get|list)
-   . internals/activity-lock-sh
-
    #the get function try to always return something. if you need to be
    #sure that the leader is not stale you should commit a noop before calling get
    read last_log_index   < state/last_log_index
@@ -21,14 +19,14 @@ get|list)
                echo $val
             else
                echo key "$2" does not exit. >&2
-               quit 1
+               exit 1
             fi
          else
             if [ -d state-machine-data/"$2" ] ; then
                ls -1 state-machine-data/"$2"
             else
                echo directory "$2" does not exit. >&2
-               quit 1
+               exit 1
             fi
          fi
       else
@@ -36,12 +34,10 @@ get|list)
       fi
    else
       echo leader is stale. try again. >&2
-      quit 1
+      exit 1
    fi
 ;;
 if|set|unset|noop|conf_old_new|conf_new)
-   . internals/activity-lock-ex
-
    read hostname         < temp/hostname
    read server_role      < temp/server_role
    read current_term     < state/current_term
@@ -66,21 +62,21 @@ if|set|unset|noop|conf_old_new|conf_new)
                if [ "$val" "$3" "$4" ] ; then
                   if [ "$val" = "$6" ] ; then
                      echo value of "$2" already set to "$6" >&2
-                     quit 5
+                     exit 5
                   fi
                   #change positional parameter to perform a normal "set" in append-entry below
                   set -- "set" "$2" "$6"
                else
                   echo value of "$2" does not match "$4" >&2
-                  quit 6
+                  exit 6
                fi
             else
                echo key "$2" does not exist. >&2
-               quit 7
+               exit 7
             fi
          else
             echo leader is stale. try again. >&2
-            quit 1
+            exit 1
          fi
       fi
 
@@ -94,14 +90,14 @@ if|set|unset|noop|conf_old_new|conf_new)
          done
       fi
 
-      nolock="true" internals/append-entry $current_term $hostname $last_log_index $last_log_term \
+      internals/append-entry $current_term $hostname $last_log_index $last_log_term \
          $current_term "$1" "$2 $3" $commit_index > temp/${hostname}_append_result
       read term result < temp/${hostname}_append_result
 
       if [ "$term" -eq "$current_term" -a "$result" = "true" ] ; then
          #append entry returned ok, now try to commit the change
          entry_index=$(($last_log_index+1))
-         nolock="true" internals/leader
+         internals/leader
          read commit_index < temp/commit_index
 
          if [ "$commit_index" -ge "$entry_index" -a -f state-machine-log/$entry_index/$term ] ; then
@@ -109,18 +105,16 @@ if|set|unset|noop|conf_old_new|conf_new)
             :
          else
             echo timeout waiting for commit. >&2
-            quit 2
+            exit 2
          fi
 
       else
          echo append-entry failed. >&2
-         quit 3
+         exit 3
       fi
    else
       echo $hostname not leader. >&2
-      quit 4
+      exit 4
    fi
 ;;
 esac
-
-quit 0

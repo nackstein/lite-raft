@@ -3,8 +3,6 @@
 #Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
 #Distributed under the terms of a MIT license.
 
-. internals/activity-lock-ex
-
 read election_timeout < temp/election_timeout
 election_timeout=$(($election_timeout-1))
 echo $election_timeout > temp/election_timeout
@@ -39,5 +37,3 @@ else
    # apply commited log.....
    . internals/apply-log
 fi
-
-quit 0

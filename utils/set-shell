@@ -1,7 +1,8 @@
 #!/bin/sh
 
 for f in lite-raft* internals/* ; do
-   sed -e "s|#!/bin/dash|#!/usr/bin/sh|" < $f > temp123
+   #some sed don't support -i
+   sed -e "s|^#!.*|#!${1:-/bin/sh}|" < $f > temp123
    chmod +x temp123
    mv temp123 $f
 done

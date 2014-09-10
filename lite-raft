@@ -14,12 +14,10 @@ case "$1" in
 
    echo first-boot
 
-   shell="${2:-/bin/sh}" 
-
-   #for now exclude script in pkg/control-scrips, they can use different languages.
+   #set the preferred sh interpreter
    for f in lite-raft-* internals/* ; do
       #some sed don't support -i
-      sed -e "s|^#!.*|#!$shell|" < $f > temp123
+      sed -e "s|^#!.*|#!${2:-/bin/sh}|" < $f > temp123
       chmod +x temp123
       mv temp123 $f
    done

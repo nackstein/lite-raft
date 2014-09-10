@@ -21,8 +21,8 @@ if [ -d temp/master_lockdir ] ; then
       case "$1" in
       if|set|unset)
          if [ "$1" != "if" -a -z "$2" -o "$1" = "if" -a "$5" != "set" ] ; then
-            echo missing argument
-            exit 1
+            echo missing argument >&2
+            exit 10
          fi
          internals/activity-lock-ex internals/client "$@"
       ;;
@@ -46,8 +46,8 @@ if [ -d temp/master_lockdir ] ; then
       ;;
       add-member|del-member)
          if [ -z "$2" ] ; then
-            echo missing argument
-            exit 1
+            echo missing argument >&2
+            exit 10
          fi
          read cluster_nodes < conf/cluster_nodes
          cluster_nodes_new="$cluster_nodes $2"
@@ -64,10 +64,10 @@ if [ -d temp/master_lockdir ] ; then
                echo conf_new committed.
                [ "$1" = "del-member" ] && ssh $sshopt $2 "cd $PWD ; ./lite-raft stop"
             else
-               echo returned error $?
+               exit $?
             fi
          else
-            echo returned error $?
+            exit $?
          fi
       ;;
       *)
@@ -83,12 +83,13 @@ if [ -d temp/master_lockdir ] ; then
 
    elif [ -n "$current_leader" ] ; then
       ssh $sshopt $current_leader "cd $PWD ; ./lite-raft-client '$1' '$2' '$3' '$4' '$5' '$6'"
+      exit $(($?+50))
    else
       echo leader is not available.
-      exit 1
+      exit 11
    fi
 else
    #no process running here, return error
    echo no server running on $hostname. cannot process request.
-   exit 1
+   exit 12
 fi

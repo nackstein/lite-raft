@@ -13,34 +13,49 @@ sshopt="-o ControlPath=~/.ssh/lite-raft-socket-%h -o ControlMaster=auto \
 
 # change the following parameters to fit your configuration
 
-cluster_nodes="lizard"
-lite_raft_path="/home/vortex/lite-raft"
-user=vortex
+cluster_nodes="snsv01773 snsv01774 snsv01775"
+lite_raft_path="/root/lite-raft"
+user=root
 
 ################################################################
 # note: echo -n is not supported on hp-ux so we use printf
 
 randlist () {
-   n=$((0x$(echo $(od -An -N1 -tx1 /dev/urandom))%$#+1))
+   #n=$((0x$(echo $(od -An -N1 -tx1 /dev/urandom))%$#+1))
+   n=$(($$%$#+1))
 
    i=$n
    while [ $i -lt $(($#+1)) ] ; do
       eval printf "\$$i\ "
-      i=$(($i+1))
+      i=$((i+1))
    done
 
    i=1
    while [ $i -lt $n ] ; do
       eval printf "\$$i\ "
-      i=$(($i+1))
+      i=$((i+1))
    done
 }
 
-for h in $(randlist $cluster_nodes) ; do
+if [ -f temp/remote_leader ] ; then
+   read remote_leader < temp/remote_leader
+   cluster_nodes=$(for h in $cluster_nodes; do [ "$h" != "$remote_leader" ] && printf "$h "; done)
+fi
+
+host_list="$remote_leader $(randlist $cluster_nodes)"
+
+for h in $host_list ; do
    [ -S ~/.ssh/lite-raft-socket-$h ] || \
    ssh -MNf $sshopt $user@$h >/dev/null && \
    {
       ssh $sshopt $user@$h "cd $lite_raft_path ; ./lite-raft-client '$1' '$2' '$3' '$4' '$5' '$6'"
-      exit $?
+      ret=$?
+      if [ "$ret" -ge 50 ] ; then
+         echo "" > temp/remote_leader
+         exit $((ret-50)) 
+      else
+         echo $h > temp/remote_leader
+         exit $ret
+      fi
    }
 done

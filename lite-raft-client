@@ -3,13 +3,12 @@
 #Copyright (c) 2014 Luigi Tarenga <luigi.tarenga@gmail.com>
 #Distributed under the terms of a MIT license.
 
+export LANG=C
 export sshopt="-o ControlPath=~/.ssh/lite-raft-socket-%h -o ControlMaster=auto \
 -o ConnectTimeout=1 -o ServerAliveInterval=2 -o ServerAliveCountMax=3 \
 -o PasswordAuthentication=no -o StrictHostKeyChecking=no -q"
 
-export LANG=C
-
-cd $(dirname $0)
+cd ${0%/*}
 
 read server_role      < temp/server_role
 read hostname         < temp/hostname

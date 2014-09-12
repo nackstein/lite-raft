@@ -19,14 +19,14 @@ get|list)
                echo $val
             else
                echo key "$2" does not exit. >&2
-               exit 1
+               exit 9
             fi
          else
             if [ -d state-machine-data/"$2" ] ; then
                ls -1 state-machine-data/"$2"
             else
                echo directory "$2" does not exit. >&2
-               exit 1
+               exit 8
             fi
          fi
       else
@@ -84,7 +84,7 @@ if|set|unset|noop|conf_old_new|conf_new)
          for h in $2 ; do
             [ "$h" = "$hostname" ] && continue
             [ -f temp/${h}_next_index  ] && continue
-            echo $(($last_log_index+1)) > temp/${h}_next_index
+            echo $((last_log_index+1)) > temp/${h}_next_index
             echo 0                      > temp/${h}_match_index
             echo 1                      > temp/${h}_follower_heartbeat
          done
@@ -96,7 +96,7 @@ if|set|unset|noop|conf_old_new|conf_new)
 
       if [ "$term" -eq "$current_term" -a "$result" = "true" ] ; then
          #append entry returned ok, now try to commit the change
-         entry_index=$(($last_log_index+1))
+         entry_index=$((last_log_index+1))
          internals/leader
          read commit_index < temp/commit_index
 

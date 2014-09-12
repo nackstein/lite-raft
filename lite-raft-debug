@@ -5,7 +5,7 @@
 
 #just an incomplete utility script
 
-cd $(dirname $0)
+cd ${0%/*}
 
 echo current_leader $(cat temp/current_leader) 
 echo server_role    $(cat temp/server_role) 

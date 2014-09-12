@@ -19,7 +19,7 @@ until
    ( echo "" > temp/activity_lockdir_sh/$$ ) > /dev/null 2>&1 < /dev/null
 do
    if [ -n "$lock_timeout" ] ; then
-      lock_timeout=$(($lock_timeout-1))
+      lock_timeout=$((lock_timeout-1))
       [ "$lock_timeout" -lt 0 ] && exit 1
    fi
 

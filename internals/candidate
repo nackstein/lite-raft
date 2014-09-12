@@ -10,7 +10,7 @@
 #todo check if present in configuration for che configuration change
 
 read election_timeout < temp/election_timeout
-election_timeout=$(($election_timeout-1))
+election_timeout=$((election_timeout-1))
 echo $election_timeout > temp/election_timeout
 
 read current_term   < state/current_term
@@ -38,7 +38,7 @@ if [ "$election_timeout" -le 0 ] ; then
    #restart election
    cp conf/election_timeout temp/election_timeout
    echo "" > state/voted_for
-   current_term=$(($current_term+1))
+   current_term=$((current_term+1))
    echo $current_term > state/current_term
    echo $(date) restarting election.
 fi
@@ -53,7 +53,7 @@ if [ "$voted_for" = "$hostname" ] ; then
 
    for h in $cluster_nodes_old_new ; do
       [ "$h" = "$hostname" ] && continue
-      votes=$(($votes+1))
+      votes=$((votes+1))
       ssh $sshopt $h "cd $PWD ; lock_timeout=4 exec internals/activity-lock-ex internals/request-vote " \
                      "$current_term $hostname $last_log_index $last_log_term" > temp/${h}_vote < /dev/null &
    done
@@ -66,20 +66,20 @@ if [ "$voted_for" = "$hostname" ] ; then
       for h in $configuration ; do
          [ "$h" = "$hostname" ] && continue
          read term vote_granted < temp/${h}_vote
-         if [ "$(($term+0))" -eq "$current_term" -a "$vote_granted" = "true" ] ; then
-            votes=$(($votes+1))
-         elif [ "$(($term+0))" -gt "$current_term" -a "$vote_granted" = "false" ] ; then
+         if [ "$((term+0))" -eq "$current_term" -a "$vote_granted" = "true" ] ; then
+            votes=$((votes+1))
+         elif [ "$((term+0))" -gt "$current_term" -a "$vote_granted" = "false" ] ; then
             #found a higher term, turn to follower
             cp conf/election_timeout temp/election_timeout
             echo ""            > state/voted_for
             echo follower      > temp/server_role
-            echo "$(($term+0))" > state/current_term
+            echo "$((term+0))" > state/current_term
             echo $(date) $h sent a higher term. switching to follower.
             exit 0
          fi
-         i=$(($i+1))
+         i=$((i+1))
       done
-      majority=$(($i/2+1))
+      majority=$((i/2+1))
       [ "$votes" -lt "$majority" ] && winner=false
    done
 
@@ -88,7 +88,7 @@ if [ "$voted_for" = "$hostname" ] ; then
       rm -f temp/*_next_index
       for h in $cluster_nodes_old_new ; do
          [ "$h" = "$hostname" ] && continue
-         echo $(($last_log_index+1)) > temp/${h}_next_index
+         echo $((last_log_index+1)) > temp/${h}_next_index
          echo 0                      > temp/${h}_match_index
          echo 1                      > temp/${h}_follower_heartbeat
       done

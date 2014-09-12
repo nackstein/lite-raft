@@ -8,7 +8,7 @@ export sshopt="-o ControlPath=~/.ssh/lite-raft-socket-%h -o ControlMaster=auto \
 -o ConnectTimeout=1 -o ServerAliveInterval=2 -o ServerAliveCountMax=3 \
 -o PasswordAuthentication=no -o StrictHostKeyChecking=no -q"
 
-cd $(dirname $0)
+cd ${0%/*}
 
 if [ $# -ne 0 ] ; then
    echo "Usage: ${0##*/}"
@@ -87,7 +87,7 @@ while true ; do
       read first_log_index < state-machine-snapshot/cur/last_included_index
    fi
    read last_log_index < state/last_log_index
-   if [ $(($last_log_index-$first_log_index)) -gt $snapshot_period ] ; then
+   if [ $((last_log_index-first_log_index)) -gt $snapshot_period ] ; then
       lock_timeout=10 internals/activity-lock-ex internals/create-snapshot
    fi
 

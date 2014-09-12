@@ -7,7 +7,7 @@ read last_log_applied < temp/last_log_applied
 read commit_index     < temp/commit_index
 
 while [ "$last_log_applied" -lt "$commit_index" ] ; do
-   read command key value < $(echo state-machine-log/$(($last_log_applied+1))/*)
+   read command key value < $(echo state-machine-log/$((last_log_applied+1))/*)
    case "$command" in
    set)
       mkdir -p state-machine-data/$(dirname "$key")
@@ -23,6 +23,6 @@ while [ "$last_log_applied" -lt "$commit_index" ] ; do
       #find state-machine-data/$(dirname "$key")/ -empty -type d -exec rm -r \{\} \;
    ;;
    esac
-   last_log_applied=$(($last_log_applied+1))
+   last_log_applied=$((last_log_applied+1))
    echo $last_log_applied > temp/last_log_applied
 done
